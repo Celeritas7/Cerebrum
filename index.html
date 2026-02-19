@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SQUAD — Task Manager</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback, useRef } = React;
+
+const APP_KEY = "team-task-manager-v6";
+
+function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
+function isWeekend() { const d = new Date().getDay(); return d === 0 || d === 6; }
+function getTodayKey() { return new Date().toISOString().split("T")[0]; }
+function getTeamLabel(k) { return k === "attackers" ? "ATTACKERS" : k === "midPlayers" ? "Mid Players" : k === "defenders" ? "Defenders" : "COACH"; }
+function getTeamIcon(k) { return k === "attackers" ? "⚔️" : k === "midPlayers" ? "⚡" : k === "defenders" ? "🛡️" : "📋"; }
+function isDayTime() { const h = new Date().getHours(); return h >= 6 && h < 18; }
+function getWeekDates() {
+  const now = new Date(); const day = now.getDay(); const mon = new Date(now);
+  mon.setDate(now.getDate() - ((day + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon); d.setDate(mon.getDate() + i);
+    return { key: d.toISOString().split("T")[0], label: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][i], date: d.getDate(), isToday: d.toISOString().split("T")[0] === getTodayKey(), isWeekend: i >= 5 };
+  });
+}
+
+const FONT_OPTIONS = {
+  attackers: [
+    { id: "blackops", name: "Black Ops One", family: "'Black Ops One', cursive", vibe: "Military stencil" },
+    { id: "anton", name: "Anton", family: "'Anton', sans-serif", vibe: "Tall, screaming" },
+    { id: "russo", name: "Russo One", family: "'Russo One', sans-serif", vibe: "Heavy military" },
+    { id: "teko", name: "Teko", family: "'Teko', sans-serif", vibe: "Sharp, blade-like" },
+    { id: "saira", name: "Saira Stencil One", family: "'Saira Stencil One', cursive", vibe: "Raw stencil" },
+  ],
+  midPlayers: [
+    { id: "dmsans", name: "DM Sans", family: "'DM Sans', sans-serif", vibe: "Clean, balanced" },
+    { id: "nunito", name: "Nunito", family: "'Nunito', sans-serif", vibe: "Friendly diplomat" },
+    { id: "outfit", name: "Outfit", family: "'Outfit', sans-serif", vibe: "Modern neutral" },
+    { id: "manrope", name: "Manrope", family: "'Manrope', sans-serif", vibe: "Calm professional" },
+  ],
+  defenders: [
+    { id: "orbitron", name: "Orbitron", family: "'Orbitron', sans-serif", vibe: "Shield-like" },
+    { id: "rajdhani", name: "Rajdhani", family: "'Rajdhani', sans-serif", vibe: "Tight, nervous" },
+    { id: "exo2", name: "Exo 2", family: "'Exo 2', sans-serif", vibe: "Holding breath" },
+    { id: "electrolize", name: "Electrolize", family: "'Electrolize', sans-serif", vibe: "Terminal" },
+    { id: "ibmplex", name: "IBM Plex Mono", family: "'IBM Plex Mono', monospace", vibe: "Institutional" },
+  ],
+  coach: [
+    { id: "spacemono", name: "Space Mono", family: "'Space Mono', monospace", vibe: "Tactical data" },
+    { id: "jetbrains", name: "JetBrains Mono", family: "'JetBrains Mono', monospace", vibe: "Code precision" },
+    { id: "fira", name: "Fira Code", family: "'Fira Code', monospace", vibe: "Engineer's log" },
+  ],
+};
+
+const FONTS_CSS = `@import url('https://fonts.googleapis.com/css2?family=Anton&family=Black+Ops+One&family=Chakra+Petch:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Electrolize&family=Exo+2:wght@400;500;600;700;800&family=Fira+Code:wght@400;700&family=IBM+Plex+Mono:wght@400;500;700&family=JetBrains+Mono:wght@400;700&family=Manrope:wght@400;500;600;700&family=Nunito:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&family=Russo+One&family=Saira+Stencil+One&family=Share+Tech+Mono&family=Space+Mono:wght@400;700&family=Teko:wght@400;500;600;700&display=swap');`;
+
+function getFont(tk, fid) { const o = FONT_OPTIONS[tk]; const f = o.find(x => x.id === fid); return f ? f.family : o[0].family; }
+
+function buildP(fonts) {
+  return {
+    attackers: { font: getFont("attackers", fonts.attackers), bodyFont: "'Chakra Petch', sans-serif", titleStyle: { fontWeight: 400, letterSpacing: "2px", textTransform: "uppercase" }, labelStyle: { fontWeight: 400, letterSpacing: "3px", textTransform: "uppercase", fontSize: 10 }, taskStyle: { fontWeight: 500, fontSize: 14, lineHeight: "1.5", letterSpacing: "0.5px", fontFamily: "'Chakra Petch', sans-serif" }, btnStyle: { borderRadius: 4, letterSpacing: "2px", fontWeight: 600, textTransform: "uppercase", fontSize: 11 }, cardRadius: 6, checkRadius: 2, borderWidth: 3, tagline: "NO PERMISSION NEEDED. MOVE NOW.", nameDisplay: "ATTACKERS" },
+    midPlayers: { font: getFont("midPlayers", fonts.midPlayers), bodyFont: getFont("midPlayers", fonts.midPlayers), titleStyle: { fontWeight: 600, letterSpacing: "0.5px" }, labelStyle: { fontWeight: 500, letterSpacing: "1.5px", textTransform: "uppercase", fontSize: 11 }, taskStyle: { fontWeight: 400, fontSize: 13, lineHeight: "1.5" }, btnStyle: { borderRadius: 8, letterSpacing: "0.5px", fontWeight: 500, fontSize: 11 }, cardRadius: 10, checkRadius: 4, borderWidth: 2, tagline: "Keeping the system running. No drama, just delivery.", nameDisplay: "Mid Players" },
+    defenders: { font: getFont("defenders", fonts.defenders), bodyFont: "'Share Tech Mono', monospace", titleStyle: { fontWeight: 700, letterSpacing: "4px", textTransform: "uppercase" }, labelStyle: { fontWeight: 400, letterSpacing: "3px", textTransform: "uppercase", fontSize: 9 }, taskStyle: { fontWeight: 400, fontSize: 12, lineHeight: "1.6", letterSpacing: "1px", fontFamily: "'Share Tech Mono', monospace" }, btnStyle: { borderRadius: 2, letterSpacing: "3px", fontWeight: 700, textTransform: "uppercase", fontSize: 10 }, cardRadius: 4, checkRadius: 0, borderWidth: 2, tagline: "SECURE. PROTECT. DO NOT SKIP.", nameDisplay: "DEFENDERS" },
+    coach: { font: getFont("coach", fonts.coach), bodyFont: getFont("coach", fonts.coach), titleStyle: { fontWeight: 700, letterSpacing: "3px", textTransform: "uppercase" }, labelStyle: { fontWeight: 400, letterSpacing: "2px", textTransform: "uppercase", fontSize: 12 }, taskStyle: { fontWeight: 400, fontSize: 13, lineHeight: "1.5" }, btnStyle: { borderRadius: 4, letterSpacing: "2px", fontWeight: 700, textTransform: "uppercase", fontSize: 12 }, cardRadius: 8, checkRadius: 4, borderWidth: 1, tagline: "DATA. RULES. RESULTS.", nameDisplay: "COACH" },
+  };
+}
+
+const THEME_LIST = [
+  { id: "light", name: "Day Mode", icon: "☀️", desc: "Bright & energetic" },
+  { id: "dark", name: "Night Mode", icon: "🌙", desc: "Deep focus" },
+  { id: "midnight", name: "Midnight", icon: "🌌", desc: "Purple galaxy" },
+  { id: "stadium", name: "Stadium", icon: "🏟️", desc: "Under the lights" },
+  { id: "stealth", name: "Stealth", icon: "🥷", desc: "Muted tactical" },
+  { id: "fire", name: "Blaze", icon: "🔥", desc: "Hot intensity" },
+];
+
+function makeTeamColors(mode) {
+  const atkShades = ["#C62828","#D32F2F","#E53935","#8E0000","#FF1744","#B71C1C","#D50000","#FF5252","#EF5350","#E57373"];
+  const midShades = ["#D4A017","#C49000","#E5B800","#DAA520","#F5C518","#B8960F","#CFAE27","#E2C044","#BFA030","#A68B00"];
+  const defShades = ["#1565C0","#0D47A1","#1976D2","#0A3D91","#42A5F5","#1A237E","#283593","#3F51B5","#5C6BC0","#1E88E5"];
+  const coaShades = ["#388E3C","#1B5E20","#66BB6A","#4CAF50","#A5D6A7"];
+  const isLight = mode === "light";
+  const configs = {
+    light:    { bg:"#F4F1EC", cardBg:"#FFFFFF", surface:"rgba(0,0,0,0.025)", text:"#1A1A2E", textSec:"rgba(26,26,46,0.55)", textMut:"rgba(26,26,46,0.28)", border:"rgba(26,26,46,0.08)", borderStr:"rgba(26,26,46,0.15)", inputBg:"rgba(0,0,0,0.035)", inputBrd:"rgba(26,26,46,0.13)", topBar:"rgba(255,255,255,0.9)", shadow:"0 1px 8px rgba(0,0,0,0.06)", navAct:"rgba(0,0,0,0.05)", navTxt:"rgba(26,26,46,0.4)", navActTxt:"#1A1A2E", ok:"#16A34A", warn:"#D97706", barBg:"rgba(0,0,0,0.06)", lockBg:"rgba(220,38,38,0.06)", lockBrd:"#EF4444", sessBrd:"rgba(220,38,38,0.3)", modalBg:"#FFFFFF", modalOv:"rgba(0,0,0,0.25)", chkOff:"rgba(26,26,46,0.18)", rmBtn:"rgba(26,26,46,0.18)", fieldBg:"#2D8B3E", fieldLine:"rgba(255,255,255,0.7)", fieldGrass:"#338B44",
+      attackers:{base:"#B71C1C",lighter:"#FFEBEE",card:"linear-gradient(145deg,#FFFFFF,#FFF5F5)",border:"rgba(183,28,28,0.15)",badge:"#B71C1C",shades:atkShades},
+      midPlayers:{base:"#B8960F",lighter:"#FFF9E6",card:"linear-gradient(145deg,#FFFFFF,#FFFDF5)",border:"rgba(184,150,15,0.15)",badge:"#A68B00",shades:midShades},
+      defenders:{base:"#0D47A1",lighter:"#E3F2FD",card:"linear-gradient(145deg,#FFFFFF,#F5F9FF)",border:"rgba(13,71,161,0.15)",badge:"#0D47A1",shades:defShades},
+      coach:{base:"#2E7D32",lighter:"#E8F5E9",card:"linear-gradient(145deg,#FFFFFF,#F5FFF5)",border:"rgba(46,125,50,0.15)",badge:"#2E7D32",shades:coaShades}},
+    dark:     { bg:"#080B12", cardBg:"rgba(255,255,255,0.02)", surface:"rgba(255,255,255,0.025)", text:"#E2E8F0", textSec:"rgba(226,232,240,0.5)", textMut:"rgba(226,232,240,0.22)", border:"rgba(255,255,255,0.06)", borderStr:"rgba(255,255,255,0.1)", inputBg:"rgba(255,255,255,0.04)", inputBrd:"rgba(255,255,255,0.1)", topBar:"rgba(8,11,18,0.95)", shadow:"none", navAct:"rgba(255,255,255,0.07)", navTxt:"rgba(255,255,255,0.35)", navActTxt:"#fff", ok:"#66BB6A", warn:"#FFB74D", barBg:"rgba(255,255,255,0.05)", lockBg:"rgba(220,38,38,0.1)", lockBrd:"#C62828", sessBrd:"rgba(198,40,40,0.5)", modalBg:"#0C1018", modalOv:"rgba(0,0,0,0.92)", chkOff:"rgba(255,255,255,0.12)", rmBtn:"rgba(255,255,255,0.12)", fieldBg:"#1A3D1F", fieldLine:"rgba(255,255,255,0.35)", fieldGrass:"#1E4424",
+      attackers:{base:"#EF4444",lighter:"rgba(183,28,28,0.1)",card:"linear-gradient(145deg,rgba(183,28,28,0.06),rgba(8,11,18,0.95))",border:"rgba(239,68,68,0.2)",badge:"#C62828",shades:atkShades},
+      midPlayers:{base:"#E5B800",lighter:"rgba(229,184,0,0.08)",card:"linear-gradient(145deg,rgba(229,184,0,0.06),rgba(8,11,18,0.95))",border:"rgba(229,184,0,0.2)",badge:"#D4A017",shades:midShades},
+      defenders:{base:"#60A5FA",lighter:"rgba(13,71,161,0.1)",card:"linear-gradient(145deg,rgba(13,71,161,0.06),rgba(8,11,18,0.95))",border:"rgba(96,165,250,0.2)",badge:"#1565C0",shades:defShades},
+      coach:{base:"#4ADE80",lighter:"rgba(46,125,50,0.08)",card:"linear-gradient(145deg,rgba(46,125,50,0.06),rgba(8,11,18,0.95))",border:"rgba(74,222,128,0.2)",badge:"#2E7D32",shades:coaShades}},
+    midnight: { bg:"#0D0A1A", cardBg:"rgba(138,92,246,0.04)", surface:"rgba(138,92,246,0.05)", text:"#E0D8F0", textSec:"rgba(224,216,240,0.5)", textMut:"rgba(224,216,240,0.22)", border:"rgba(138,92,246,0.1)", borderStr:"rgba(138,92,246,0.18)", inputBg:"rgba(138,92,246,0.06)", inputBrd:"rgba(138,92,246,0.15)", topBar:"rgba(13,10,26,0.95)", shadow:"0 2px 12px rgba(88,28,235,0.08)", navAct:"rgba(138,92,246,0.1)", navTxt:"rgba(224,216,240,0.35)", navActTxt:"#E0D8F0", ok:"#A78BFA", warn:"#FBBF24", barBg:"rgba(138,92,246,0.08)", lockBg:"rgba(220,38,38,0.1)", lockBrd:"#F87171", sessBrd:"rgba(248,113,113,0.4)", modalBg:"#120E22", modalOv:"rgba(0,0,0,0.9)", chkOff:"rgba(138,92,246,0.2)", rmBtn:"rgba(138,92,246,0.2)", fieldBg:"#1A1530", fieldLine:"rgba(138,92,246,0.4)", fieldGrass:"#1E1835",
+      attackers:{base:"#F87171",lighter:"rgba(248,113,113,0.08)",card:"linear-gradient(145deg,rgba(248,113,113,0.05),rgba(13,10,26,0.95))",border:"rgba(248,113,113,0.15)",badge:"#DC2626",shades:atkShades},
+      midPlayers:{base:"#F5C518",lighter:"rgba(245,197,24,0.06)",card:"linear-gradient(145deg,rgba(245,197,24,0.04),rgba(13,10,26,0.95))",border:"rgba(245,197,24,0.12)",badge:"#D4A017",shades:midShades},
+      defenders:{base:"#A78BFA",lighter:"rgba(167,139,250,0.08)",card:"linear-gradient(145deg,rgba(167,139,250,0.05),rgba(13,10,26,0.95))",border:"rgba(167,139,250,0.15)",badge:"#7C3AED",shades:defShades},
+      coach:{base:"#34D399",lighter:"rgba(52,211,153,0.06)",card:"linear-gradient(145deg,rgba(52,211,153,0.04),rgba(13,10,26,0.95))",border:"rgba(52,211,153,0.12)",badge:"#059669",shades:coaShades}},
+    stadium:  { bg:"#0A1F10", cardBg:"rgba(34,197,94,0.04)", surface:"rgba(34,197,94,0.04)", text:"#D4F0D8", textSec:"rgba(212,240,216,0.55)", textMut:"rgba(212,240,216,0.25)", border:"rgba(34,197,94,0.12)", borderStr:"rgba(34,197,94,0.2)", inputBg:"rgba(34,197,94,0.06)", inputBrd:"rgba(34,197,94,0.15)", topBar:"rgba(10,31,16,0.95)", shadow:"0 2px 12px rgba(0,0,0,0.15)", navAct:"rgba(34,197,94,0.08)", navTxt:"rgba(212,240,216,0.35)", navActTxt:"#D4F0D8", ok:"#4ADE80", warn:"#FBBF24", barBg:"rgba(34,197,94,0.08)", lockBg:"rgba(220,38,38,0.12)", lockBrd:"#EF4444", sessBrd:"rgba(239,68,68,0.4)", modalBg:"#0C2213", modalOv:"rgba(0,0,0,0.9)", chkOff:"rgba(34,197,94,0.2)", rmBtn:"rgba(34,197,94,0.2)", fieldBg:"#145A24", fieldLine:"rgba(255,255,255,0.5)", fieldGrass:"#186830",
+      attackers:{base:"#EF4444",lighter:"rgba(239,68,68,0.08)",card:"linear-gradient(145deg,rgba(239,68,68,0.05),rgba(10,31,16,0.95))",border:"rgba(239,68,68,0.18)",badge:"#DC2626",shades:atkShades},
+      midPlayers:{base:"#E5B800",lighter:"rgba(229,184,0,0.06)",card:"linear-gradient(145deg,rgba(229,184,0,0.04),rgba(10,31,16,0.95))",border:"rgba(229,184,0,0.15)",badge:"#C49000",shades:midShades},
+      defenders:{base:"#60A5FA",lighter:"rgba(96,165,250,0.06)",card:"linear-gradient(145deg,rgba(96,165,250,0.04),rgba(10,31,16,0.95))",border:"rgba(96,165,250,0.15)",badge:"#1565C0",shades:defShades},
+      coach:{base:"#4ADE80",lighter:"rgba(74,222,128,0.08)",card:"linear-gradient(145deg,rgba(74,222,128,0.04),rgba(10,31,16,0.95))",border:"rgba(74,222,128,0.18)",badge:"#16A34A",shades:coaShades}},
+    stealth:  { bg:"#18181B", cardBg:"rgba(255,255,255,0.03)", surface:"rgba(255,255,255,0.03)", text:"#A1A1AA", textSec:"rgba(161,161,170,0.6)", textMut:"rgba(161,161,170,0.3)", border:"rgba(255,255,255,0.06)", borderStr:"rgba(255,255,255,0.1)", inputBg:"rgba(255,255,255,0.04)", inputBrd:"rgba(255,255,255,0.08)", topBar:"rgba(24,24,27,0.95)", shadow:"none", navAct:"rgba(255,255,255,0.06)", navTxt:"rgba(161,161,170,0.4)", navActTxt:"#A1A1AA", ok:"#6EE7B7", warn:"#FCD34D", barBg:"rgba(255,255,255,0.04)", lockBg:"rgba(220,38,38,0.06)", lockBrd:"#EF4444", sessBrd:"rgba(239,68,68,0.3)", modalBg:"#1C1C20", modalOv:"rgba(0,0,0,0.9)", chkOff:"rgba(255,255,255,0.1)", rmBtn:"rgba(255,255,255,0.1)", fieldBg:"#1E2E1F", fieldLine:"rgba(255,255,255,0.2)", fieldGrass:"#233524",
+      attackers:{base:"#F87171",lighter:"rgba(248,113,113,0.05)",card:"linear-gradient(145deg,rgba(248,113,113,0.03),rgba(24,24,27,0.95))",border:"rgba(248,113,113,0.1)",badge:"#B91C1C",shades:atkShades},
+      midPlayers:{base:"#E2C044",lighter:"rgba(226,192,68,0.04)",card:"linear-gradient(145deg,rgba(226,192,68,0.03),rgba(24,24,27,0.95))",border:"rgba(226,192,68,0.08)",badge:"#B8960F",shades:midShades},
+      defenders:{base:"#93C5FD",lighter:"rgba(147,197,253,0.04)",card:"linear-gradient(145deg,rgba(147,197,253,0.03),rgba(24,24,27,0.95))",border:"rgba(147,197,253,0.08)",badge:"#1E40AF",shades:defShades},
+      coach:{base:"#6EE7B7",lighter:"rgba(110,231,183,0.04)",card:"linear-gradient(145deg,rgba(110,231,183,0.03),rgba(24,24,27,0.95))",border:"rgba(110,231,183,0.08)",badge:"#047857",shades:coaShades}},
+    fire:     { bg:"#1A0A0A", cardBg:"rgba(239,68,68,0.04)", surface:"rgba(239,68,68,0.04)", text:"#FDE2D2", textSec:"rgba(253,226,210,0.55)", textMut:"rgba(253,226,210,0.25)", border:"rgba(239,68,68,0.1)", borderStr:"rgba(239,68,68,0.18)", inputBg:"rgba(239,68,68,0.06)", inputBrd:"rgba(239,68,68,0.12)", topBar:"rgba(26,10,10,0.95)", shadow:"0 2px 12px rgba(220,38,38,0.08)", navAct:"rgba(239,68,68,0.08)", navTxt:"rgba(253,226,210,0.35)", navActTxt:"#FDE2D2", ok:"#FB923C", warn:"#FBBF24", barBg:"rgba(239,68,68,0.08)", lockBg:"rgba(220,38,38,0.15)", lockBrd:"#F87171", sessBrd:"rgba(248,113,113,0.5)", modalBg:"#1F0C0C", modalOv:"rgba(0,0,0,0.9)", chkOff:"rgba(239,68,68,0.2)", rmBtn:"rgba(239,68,68,0.2)", fieldBg:"#3D1515", fieldLine:"rgba(239,68,68,0.3)", fieldGrass:"#4A1A1A",
+      attackers:{base:"#FF6B6B",lighter:"rgba(255,107,107,0.08)",card:"linear-gradient(145deg,rgba(255,107,107,0.05),rgba(26,10,10,0.95))",border:"rgba(255,107,107,0.15)",badge:"#DC2626",shades:atkShades},
+      midPlayers:{base:"#F5C518",lighter:"rgba(245,197,24,0.06)",card:"linear-gradient(145deg,rgba(245,197,24,0.04),rgba(26,10,10,0.95))",border:"rgba(245,197,24,0.12)",badge:"#D4A017",shades:midShades},
+      defenders:{base:"#60A5FA",lighter:"rgba(96,165,250,0.06)",card:"linear-gradient(145deg,rgba(96,165,250,0.04),rgba(26,10,10,0.95))",border:"rgba(96,165,250,0.12)",badge:"#1D4ED8",shades:defShades},
+      coach:{base:"#FB923C",lighter:"rgba(251,146,60,0.06)",card:"linear-gradient(145deg,rgba(251,146,60,0.04),rgba(26,10,10,0.95))",border:"rgba(251,146,60,0.12)",badge:"#C2410C",shades:coaShades}},
+  };
+  return configs[mode] || configs.dark;
+}
+
+// ─── RECURSIVE TASK TREE HELPERS (stable, outside component) ───
+function countAllTasks(tasks) {
+  if (!tasks || !Array.isArray(tasks)) return 0;
+  let c = 0;
+  for (const t of tasks) { c++; if (t.children && t.children.length) c += countAllTasks(t.children); }
+  return c;
+}
+function countDoneTasks(tasks) {
+  if (!tasks || !Array.isArray(tasks)) return 0;
+  let c = 0;
+  for (const t of tasks) { if (t.done) c++; if (t.children && t.children.length) c += countDoneTasks(t.children); }
+  return c;
+}
+function toggleTaskInTree(tasks, tid) {
+  if (!tasks) return [];
+  return tasks.map(t => {
+    if (t.id === tid) return { ...t, done: !t.done };
+    if (t.children && t.children.length) return { ...t, children: toggleTaskInTree(t.children, tid) };
+    return t;
+  });
+}
+function addChildToTree(tasks, parentId, newTask) {
+  if (!tasks) return [];
+  return tasks.map(t => {
+    if (t.id === parentId) return { ...t, children: [...(t.children || []), newTask] };
+    // Recurse even if children is empty array (not just length > 0)
+    if (t.children) return { ...t, children: addChildToTree(t.children, parentId, newTask) };
+    return t;
+  });
+}
+function removeFromTree(tasks, tid) {
+  if (!tasks) return [];
+  return tasks.filter(t => t.id !== tid).map(t => {
+    if (t.children && t.children.length) return { ...t, children: removeFromTree(t.children, tid) };
+    return t;
+  });
+}
+function findInTree(tasks, tid) {
+  if (!tasks) return null;
+  for (const t of tasks) {
+    if (t.id === tid) return t;
+    if (t.children && t.children.length) { const f = findInTree(t.children, tid); if (f) return f; }
+  }
+  return null;
+}
+function resetTreeRecurring(tasks) {
+  if (!tasks) return [];
+  return tasks.map(t => ({
+    ...t,
+    done: t.recurring ? false : t.done,
+    children: t.children ? resetTreeRecurring(t.children) : undefined,
+  }));
+}
+// Ensure all attacker tasks have children array (migration helper)
+function migrateAttackerTasks(tasks) {
+  if (!tasks) return [];
+  return tasks.map(t => ({
+    ...t,
+    children: Array.isArray(t.children) ? migrateAttackerTasks(t.children) : [],
+    links: Array.isArray(t.links) ? t.links : [],
+  }));
+}
+// Add/remove link in task tree
+function addLinkInTree(tasks, tid, link) {
+  if (!tasks) return [];
+  return tasks.map(t => {
+    if (t.id === tid) return { ...t, links: [...(t.links || []), link] };
+    if (t.children) return { ...t, children: addLinkInTree(t.children, tid, link) };
+    return t;
+  });
+}
+function removeLinkInTree(tasks, tid, linkId) {
+  if (!tasks) return [];
+  return tasks.map(t => {
+    if (t.id === tid) return { ...t, links: (t.links || []).filter(l => l.id !== linkId) };
+    if (t.children) return { ...t, children: removeLinkInTree(t.children, tid, linkId) };
+    return t;
+  });
+}
+
+// ─── NAIVE BAYES CLASSIFIER FOR TASK ROUTING ───
+function tokenize(text) {
+  return (text || "").toLowerCase().replace(/[^a-z0-9\u3000-\u9fff\u1000-\u109f]/g, " ").split(/\s+/).filter(w => w.length > 1);
+}
+
+function buildNBClassifier(subteams, tags) {
+  // Categories: "teamKey::subId" e.g. "attackers::a1"
+  const catWordCounts = {}; // { category: { word: count } }
+  const catDocCounts = {};  // { category: totalDocs }
+  const vocab = new Set();
+  let totalDocs = 0;
+
+  const addDoc = (category, words) => {
+    if (!catWordCounts[category]) catWordCounts[category] = {};
+    catDocCounts[category] = (catDocCounts[category] || 0) + 1;
+    totalDocs++;
+    for (const w of words) {
+      vocab.add(w);
+      catWordCounts[category][w] = (catWordCounts[category][w] || 0) + 1;
+    }
+  };
+
+  // Train from sub-team names
+  for (const tk of ["attackers", "midPlayers", "defenders"]) {
+    for (const sub of (subteams[tk] || [])) {
+      const cat = `${tk}::${sub.id}`;
+      addDoc(cat, tokenize(sub.name));
+      addDoc(cat, tokenize(sub.name)); // double weight on name
+      // Train from existing tasks at all depths
+      const trainFromTasks = (tasks) => {
+        for (const t of (tasks || [])) {
+          addDoc(cat, tokenize(t.text));
+          if (t.children) trainFromTasks(t.children);
+        }
+      };
+      trainFromTasks(sub.tasks);
+    }
+  }
+  // Train from tag keywords → map to sub-teams that use those tags
+  for (const tk of ["attackers"]) {
+    for (const sub of (subteams[tk] || [])) {
+      const cat = `${tk}::${sub.id}`;
+      const collectTags = (tasks) => {
+        for (const t of (tasks || [])) {
+          if (t.tagId) {
+            const tag = (tags || []).find(tg => tg.id === t.tagId);
+            if (tag) addDoc(cat, tag.keywords || []);
+          }
+          if (t.children) collectTags(t.children);
+        }
+      };
+      collectTags(sub.tasks);
+    }
+  }
+  return { catWordCounts, catDocCounts, vocab: [...vocab], totalDocs };
+}
+
+function classifyNB(text, model) {
+  if (!model || !model.totalDocs) return [];
+  const words = tokenize(text);
+  if (!words.length) return [];
+  const { catWordCounts, catDocCounts, vocab, totalDocs } = model;
+  const V = vocab.length || 1;
+  const results = [];
+
+  for (const cat of Object.keys(catDocCounts)) {
+    // Log prior P(c)
+    let logProb = Math.log((catDocCounts[cat] || 0.1) / totalDocs);
+    const wc = catWordCounts[cat] || {};
+    const totalWords = Object.values(wc).reduce((a, b) => a + b, 0);
+    // Log likelihood P(w|c) with Laplace smoothing
+    for (const w of words) {
+      logProb += Math.log(((wc[w] || 0) + 1) / (totalWords + V));
+    }
+    const [tk, subId] = cat.split("::");
+    results.push({ category: cat, teamKey: tk, subId, logProb });
+  }
+  // Sort by probability (highest first), convert to normalized scores
+  results.sort((a, b) => b.logProb - a.logProb);
+  const maxLog = results[0]?.logProb || 0;
+  const expSum = results.reduce((a, r) => a + Math.exp(r.logProb - maxLog), 0);
+  return results.map(r => ({ ...r, confidence: Math.exp(r.logProb - maxLog) / expSum }));
+}
+
+const DEFAULT_SUBTEAMS = {
+  attackers: [
+    { id: "a1", name: "LANGUAGE STUDY", color: 0, tasks: [], links: [] },
+    { id: "a2", name: "AI STUDY", color: 1, tasks: [], links: [{ title: "CHATGPT", url: "https://chat.openai.com" },{ title: "CLAUDE", url: "https://claude.ai" },{ title: "HUGGING FACE", url: "https://huggingface.co" }] },
+    { id: "a3", name: "MECHANICAL", color: 2, tasks: [] },
+    { id: "a4", name: "APP BUILDING", color: 3, tasks: [], links: [] },
+  ],
+  midPlayers: [
+    { id: "m1", name: "Food Department", color: 0, tasks: [{ id: "m1t1", text: "Bill entry", done: false, recurring: true },{ id: "m1t2", text: "Cook lunch", done: false, recurring: true },{ id: "m1t3", text: "Cook dinner", done: false, recurring: true }] },
+    { id: "m2", name: "Grocery", color: 1, tasks: [] },
+    { id: "m3", name: "Shopping", color: 2, tasks: [] },
+    { id: "m4", name: "Exercise", color: 3, tasks: [{ id: "m4t1", text: "Workout session", done: false, recurring: true }] },
+  ],
+  defenders: [
+    { id: "d1", name: "FASHION TEAM", color: 0, tasks: [{ id: "d1t1", text: "WASH FACE", done: false, recurring: true },{ id: "d1t2", text: "CLEAN CLOTHES", done: false, recurring: true },{ id: "d1t3", text: "IRON CLOTHES", done: false, recurring: true }] },
+    { id: "d2", name: "SLEEP TEAM", color: 1, tasks: [{ id: "d2t1", text: "SLEEP 8 HOURS", done: false, recurring: true, isSleepTracker: true }] },
+  ],
+};
+
+const DEFAULT_COACH = { weekdayMinimums:{attackers:2,midPlayers:2,defenders:2}, weekendMinimums:{attackers:1,midPlayers:3,defenders:3}, punishmentDuration:24, cooldownHours:5, overridePenalty:5, ignoredDaysTrigger:3, dailyIgnorePenalty:3 };
+const DEFAULT_FONTS = { attackers:"blackops", midPlayers:"dmsans", defenders:"orbitron", coach:"spacemono" };
+
+const DEFAULT_TAGS = [
+  { id:"tag_jp", name:"JAPANESE", color:"#E53935", keywords:["japanese","kanji","hiragana","katakana","jlpt","nihongo","n5","n4","n3","n2","n1"] },
+  { id:"tag_br", name:"BURMESE", color:"#FF8F00", keywords:["burmese","myanmar","zawgyi","unicode","မြန်မာ"] },
+  { id:"tag_cn", name:"CHINESE", color:"#D81B60", keywords:["chinese","mandarin","pinyin","hanzi","hsk","中文"] },
+  { id:"tag_ai", name:"AI / ML", color:"#7B1FA2", keywords:["ai","ml","model","neural","gpt","llm","training","dataset","transformer","prompt","fine-tune","rag"] },
+  { id:"tag_react", name:"REACT", color:"#1E88E5", keywords:["react","jsx","component","hook","usestate","useeffect","frontend","tailwind","css"] },
+  { id:"tag_db", name:"DATABASE", color:"#00897B", keywords:["sql","supabase","database","query","schema","table","postgres","migration","row","column"] },
+  { id:"tag_deploy", name:"DEPLOY", color:"#43A047", keywords:["deploy","github","pages","hosting","build","ci","cd","pipeline","vercel","netlify"] },
+  { id:"tag_mech", name:"MECHANICAL", color:"#6D4C41", keywords:["mechanical","engine","thermal","fluid","design","cad","solidworks","ansys","fea","manufacturing"] },
+  { id:"tag_lang", name:"LANGUAGE", color:"#F4511E", keywords:["language","grammar","vocab","vocabulary","flashcard","quiz","alphabet","script","phonetic"] },
+  { id:"tag_doc", name:"DOCUMENTATION", color:"#5C6BC0", keywords:["doc","documentation","readme","write-up","report","notes","wiki"] },
+];
+
+// Auto-tag: scan text against all tag keywords, return best match tag id or null
+function autoTagText(text, tags) {
+  if (!text || !tags || !tags.length) return null;
+  const lower = text.toLowerCase();
+  let bestTag = null;
+  let bestScore = 0;
+  for (const tag of tags) {
+    let score = 0;
+    for (const kw of (tag.keywords || [])) {
+      if (lower.includes(kw.toLowerCase())) score++;
+    }
+    if (score > bestScore) { bestScore = score; bestTag = tag.id; }
+  }
+  return bestTag;
+}
+
+const DEFAULT_STATE = { credits:{attackers:100,midPlayers:100,defenders:100}, subteams:DEFAULT_SUBTEAMS, coach:DEFAULT_COACH, punishments:[], warnings:{attackers:0,midPlayers:0,defenders:0}, dailyLog:{}, coachSessions:[], lockdown:null, lastResetMonth:null, themeId:"auto", fonts:{...DEFAULT_FONTS}, weeklyPlan:{}, fieldPlayers:{attackers:[],midPlayers:[],defenders:[]}, focusedTasks:{}, tags:[...DEFAULT_TAGS] };
+
+const COACH_QUESTIONS = ["WHICH TEAM'S TASKS DID YOU OVERRIDE AND FOR HOW LONG?","WHAT WAS THE SPECIFIC TASK THAT FELT MORE URGENT THAN THE NEGLECTED CATEGORY?","COULD THIS TASK HAVE WAITED UNTIL THE OTHER TEAM'S TASKS WERE DONE? EXPLAIN.","WHAT PREVENTED YOU FROM COMPLETING THE MINIMUM TASKS FOR THE NEGLECTED TEAM?","WHAT WILL YOU DO DIFFERENTLY TOMORROW TO MAINTAIN BALANCE?"];
+
+function TeamTaskManager() {
+  const [state, setState] = useState(null);
+  const [view, setView] = useState("dashboard");
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [showCoachSession, setShowCoachSession] = useState(false);
+  const [sessionAnswers, setSessionAnswers] = useState({});
+  const [newTaskText, setNewTaskText] = useState("");
+  const [newLinkTitle, setNewLinkTitle] = useState("");
+  const [newLinkUrl, setNewLinkUrl] = useState("");
+  const [sleepHours, setSleepHours] = useState("");
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [showAddLink, setShowAddLink] = useState(false);
+  const [addSubTo, setAddSubTo] = useState(null); // {subId, parentId} for nested add
+  const [subTaskText, setSubTaskText] = useState("");
+  const [addLinkTo, setAddLinkTo] = useState(null); // {subId, taskId} for task-level links
+  const [taskLinkTitle, setTaskLinkTitle] = useState("");
+  const [taskLinkUrl, setTaskLinkUrl] = useState("");
+  const [tagPicker, setTagPicker] = useState(null); // {subId, taskId} for tag assignment
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#7B1FA2");
+  const [newTagKeywords, setNewTagKeywords] = useState("");
+  const [editingTag, setEditingTag] = useState(null); // tag id being edited
+  const [homeMode, setHomeMode] = useState("chat"); // "chat" | "dashboard"
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatStep, setChatStep] = useState(null); // null | "idle" | "awaiting_confirm" | "show_team"
+  const [chatSuggestions, setChatSuggestions] = useState([]); // NB results for routing
+  const [chatPendingTask, setChatPendingTask] = useState(null); // {text, teamKey, subId}
+  const [loaded, setLoaded] = useState(false);
+  const [autoTheme, setAutoTheme] = useState(isDayTime() ? "light" : "dark");
+  const [fieldSelected, setFieldSelected] = useState(null);
+  const [fieldDay, setFieldDay] = useState(getTodayKey());
+  const [editPlanTask, setEditPlanTask] = useState("");
+
+  useEffect(() => { const iv = setInterval(() => setAutoTheme(isDayTime() ? "light" : "dark"), 60000); return () => clearInterval(iv); }, []);
+  const themeMode = state?.themeId === "auto" ? autoTheme : (state?.themeId || autoTheme);
+  const T = makeTeamColors(themeMode);
+  const P_ALL = state ? buildP(state.fonts || DEFAULT_FONTS) : buildP(DEFAULT_FONTS);
+
+  useEffect(() => { async function load() { try { const raw = localStorage.getItem(APP_KEY); if (raw) { const p = JSON.parse(raw); const merged = {...DEFAULT_STATE,...p,fonts:{...DEFAULT_FONTS,...p.fonts}}; /* Migrate attacker tasks to have children arrays */ if (merged.subteams?.attackers) { merged.subteams = {...merged.subteams, attackers: merged.subteams.attackers.map(sub => ({...sub, tasks: migrateAttackerTasks(sub.tasks)}))}; } setState(merged); } else setState({...DEFAULT_STATE}); } catch(e) { setState({...DEFAULT_STATE}); } setLoaded(true); } load(); }, []);
+  useEffect(() => { if (state && loaded) try { localStorage.setItem(APP_KEY, JSON.stringify(state)); } catch(e) {} }, [state, loaded]);
+  useEffect(() => { if (!state) return; const now = new Date(); const mk = `${now.getFullYear()}-${now.getMonth()}`; if (state.lastResetMonth !== mk && now.getDate() === 1) setState(p => { const nc = {...p.credits}; for (const t of ["attackers","midPlayers","defenders"]) if (nc[t] < 100) nc[t] = 100; return {...p,credits:nc,lastResetMonth:mk}; }); }, [state]);
+  useEffect(() => { if (!state) return; const today = getTodayKey(); if (state.dailyLog[today]?.resetDone) return; setState(p => { const ns = {}; for (const tk of ["attackers","midPlayers","defenders"]) { if (tk === "attackers") { ns[tk] = p.subteams[tk].map(sub => ({...sub, tasks: resetTreeRecurring(sub.tasks)})); } else { ns[tk] = p.subteams[tk].map(sub => ({...sub,tasks:sub.tasks.map(t => t.recurring ? {...t,done:false} : t)})); } } return {...p,subteams:ns,dailyLog:{...p.dailyLog,[today]:{resetDone:true,completions:p.dailyLog[today]?.completions||{attackers:0,midPlayers:0,defenders:0}}}}; }); }, [state]);
+
+  const TC = (tk) => T[tk];
+  const getComp = useCallback((tk) => state?.dailyLog[getTodayKey()]?.completions?.[tk] || 0, [state]);
+  const getMin = useCallback((tk) => { if (!state) return 0; return isWeekend() ? state.coach.weekendMinimums[tk] : state.coach.weekdayMinimums[tk]; }, [state]);
+  const isLkd = useCallback((tk) => { if (!state) return false; if (state.lockdown && new Date() < new Date(state.lockdown.until)) return true; return !!state.punishments.find(p => p.team === tk && new Date() < new Date(p.until)); }, [state]);
+
+  const completeTask = useCallback((tk, sid, tid, sv) => {
+    if (isLkd(tk)) return;
+    setState(p => {
+      const today = getTodayKey(); const pm = {attackers:1,midPlayers:5,defenders:10};
+      const ns = {...p.subteams};
+      if (tk === "attackers") {
+        ns[tk] = p.subteams[tk].map(sub => {
+          if (sub.id !== sid) return sub;
+          return { ...sub, tasks: toggleTaskInTree(sub.tasks, tid) };
+        });
+      } else {
+        ns[tk] = p.subteams[tk].map(sub => { if (sub.id !== sid) return sub; return {...sub,tasks:sub.tasks.map(t => { if (t.id !== tid) return t; if (t.isSleepTracker && sv) return {...t,done:true,sleepHours:parseFloat(sv)}; return {...t,done:!t.done}; })}; });
+      }
+      const task = tk === "attackers"
+        ? (() => { for (const s of p.subteams[tk]) { const f = findInTree(s.tasks, tid); if (f) return f; } return null; })()
+        : p.subteams[tk].find(s => s.id === sid)?.tasks.find(t => t.id === tid);
+      const wasDone = task?.done;
+      const nc = {...p.dailyLog[today]?.completions||{attackers:0,midPlayers:0,defenders:0}}; nc[tk] = (nc[tk]||0) + (wasDone ? -1 : 1);
+      const cr = {...p.credits}; cr[tk] = Math.max(0, cr[tk] + (wasDone ? -pm[tk] : pm[tk]));
+      if (ns.midPlayers.every(s => !s.tasks.length || s.tasks.every(t => t.done)) && ns.defenders.every(s => !s.tasks.length || s.tasks.every(t => t.done)) && !wasDone) cr.attackers += isWeekend() ? 3 : 5;
+      let ld = p.lockdown; for (const t of ["attackers","midPlayers","defenders"]) { if (cr[t] <= 0 && !ld) ld = {triggeredBy:t,until:new Date(Date.now()+p.coach.cooldownHours*3600000).toISOString(),resolved:false}; }
+      return {...p,subteams:ns,credits:cr,lockdown:ld,dailyLog:{...p.dailyLog,[today]:{resetDone:true,completions:nc}}};
+    });
+  }, [state, isLkd]);
+
+  const addTask = useCallback((tk, sid, text, parentId) => setState(p => {
+    const ns = {...p.subteams};
+    const tagId = tk === "attackers" ? autoTagText(text, p.tags || DEFAULT_TAGS) : undefined;
+    const newTask = { id: generateId(), text: (tk==="attackers"||tk==="defenders") ? text.toUpperCase() : text, done: false, recurring: false, children: tk === "attackers" ? [] : undefined, links: tk === "attackers" ? [] : undefined, tagId: tagId || undefined };
+    if (parentId && tk === "attackers") {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: addChildToTree(sub.tasks, parentId, newTask) });
+    } else {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: [...sub.tasks, newTask] });
+    }
+    return {...p, subteams: ns};
+  }), []);
+  const addLink = useCallback((sid,title,url) => setState(p => {const ns={...p.subteams};ns.attackers=p.subteams.attackers.map(sub=>sub.id!==sid?sub:{...sub,links:[...(sub.links||[]),{id:generateId(),title:title.toUpperCase(),url:url.startsWith("http")?url:`https://${url}`}]});return{...p,subteams:ns};}), []);
+  // Task-level links (any depth)
+  const addTaskLink = useCallback((sid, tid, title, url) => setState(p => {
+    const ns = {...p.subteams};
+    const link = { id: generateId(), title: title.toUpperCase(), url: url.startsWith("http") ? url : `https://${url}` };
+    ns.attackers = p.subteams.attackers.map(sub => sub.id !== sid ? sub : { ...sub, tasks: addLinkInTree(sub.tasks, tid, link) });
+    return {...p, subteams: ns};
+  }), []);
+  const removeTaskLink = useCallback((sid, tid, linkId) => setState(p => {
+    const ns = {...p.subteams};
+    ns.attackers = p.subteams.attackers.map(sub => sub.id !== sid ? sub : { ...sub, tasks: removeLinkInTree(sub.tasks, tid, linkId) });
+    return {...p, subteams: ns};
+  }), []);
+
+  // Tag operations
+  const setTaskTag = useCallback((sid, tid, tagId) => setState(p => {
+    const ns = {...p.subteams};
+    const setTagInTree = (tasks, tid, tagId) => tasks.map(t => {
+      if (t.id === tid) return {...t, tagId: tagId || undefined};
+      if (t.children) return {...t, children: setTagInTree(t.children, tid, tagId)};
+      return t;
+    });
+    ns.attackers = p.subteams.attackers.map(sub => sub.id !== sid ? sub : {...sub, tasks: setTagInTree(sub.tasks, tid, tagId)});
+    return {...p, subteams: ns};
+  }), []);
+  const addTag = useCallback((name, color, keywords) => setState(p => ({
+    ...p, tags: [...(p.tags||[]), {id: "tag_"+generateId(), name: name.toUpperCase(), color, keywords: keywords.split(",").map(k=>k.trim().toLowerCase()).filter(Boolean)}]
+  })), []);
+  const removeTag = useCallback((tagId) => setState(p => ({...p, tags: (p.tags||[]).filter(t=>t.id!==tagId)})), []);
+  const updateTag = useCallback((tagId, field, value) => setState(p => ({
+    ...p, tags: (p.tags||[]).map(t => t.id !== tagId ? t : {...t, [field]: field === "keywords" ? value.split(",").map(k=>k.trim().toLowerCase()).filter(Boolean) : field === "name" ? value.toUpperCase() : value})
+  })), []);
+  const removeTask = useCallback((tk, sid, tid) => setState(p => {
+    const ns = {...p.subteams};
+    if (tk === "attackers") {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: removeFromTree(sub.tasks, tid) });
+    } else {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: sub.tasks.filter(t => t.id !== tid) });
+    }
+    return {...p, subteams: ns};
+  }), []);
+  const submitCoachSession = useCallback(() => { setState(p => ({...p,coachSessions:[...p.coachSessions,{id:generateId(),date:new Date().toISOString(),answers:{...sessionAnswers},triggeredBy:p.lockdown?.triggeredBy||"manual"}],lockdown:p.lockdown?{...p.lockdown,resolved:true,until:new Date(Date.now()+p.coach.cooldownHours*3600000).toISOString()}:null})); setSessionAnswers({}); setShowCoachSession(false); }, [sessionAnswers]);
+  const updateCoach = useCallback((path,value) => setState(p => {const nc={...p.coach};const pts=path.split(".");if(pts.length===2)nc[pts[0]]={...nc[pts[0]],[pts[1]]:parseInt(value)||0};else nc[pts[0]]=parseInt(value)||0;return{...p,coach:nc};}), []);
+
+  // Toggle a top-level task as focused/unfocused for a sub-team
+  const toggleFocusedTask = useCallback((subId, taskId) => {
+    setState(p => {
+      const ft = {...(p.focusedTasks || {})};
+      const arr = ft[subId] || [];
+      ft[subId] = arr.includes(taskId) ? arr.filter(id => id !== taskId) : [...arr, taskId];
+      return {...p, focusedTasks: ft};
+    });
+  }, []);
+  const clearFocusedTasks = useCallback((subId) => {
+    setState(p => {
+      const ft = {...(p.focusedTasks || {})};
+      ft[subId] = [];
+      return {...p, focusedTasks: ft};
+    });
+  }, []);
+
+  const addWeeklyPlanTask = (dayKey, teamKey, text) => {
+    if (!text.trim()) return;
+    setState(p => {
+      const wp = {...p.weeklyPlan};
+      const key = `${dayKey}_${teamKey}`;
+      wp[key] = [...(wp[key]||[]), {id:generateId(), text:(teamKey==="attackers"||teamKey==="defenders")?text.toUpperCase():text, confirmed:false}];
+      return {...p, weeklyPlan:wp};
+    });
+  };
+  const togglePlanTask = (dayKey, teamKey, taskId) => {
+    setState(p => {
+      const wp = {...p.weeklyPlan}; const key = `${dayKey}_${teamKey}`;
+      wp[key] = (wp[key]||[]).map(t => t.id === taskId ? {...t, confirmed:!t.confirmed} : t);
+      return {...p, weeklyPlan:wp};
+    });
+  };
+  const removePlanTask = (dayKey, teamKey, taskId) => {
+    setState(p => {
+      const wp = {...p.weeklyPlan}; const key = `${dayKey}_${teamKey}`;
+      wp[key] = (wp[key]||[]).filter(t => t.id !== taskId);
+      return {...p, weeklyPlan:wp};
+    });
+  };
+
+  /* ─── CHAT ENGINE (hooks must be before guard) ─── */
+  const nbModelRef = useRef(null);
+  useEffect(() => {
+    if (state && state.subteams) {
+      try { nbModelRef.current = buildNBClassifier(state.subteams, state.tags || []); } catch(e) { nbModelRef.current = null; }
+    }
+  }, [state]);
+
+  const mkCoach = (content, data) => ({ id: generateId(), from: "coach", content, data, ts: Date.now() });
+  const mkUser = (content) => ({ id: generateId(), from: "user", content, ts: Date.now() });
+
+  useEffect(() => {
+    if (!state || !state.subteams || !loaded || homeMode !== "chat") return;
+    if (chatMessages.length > 0) return;
+    const wknd = isWeekend();
+    const msgs = [];
+    const order = wknd ? ["defenders","midPlayers","attackers"] : ["attackers","midPlayers","defenders"];
+    const greetings = wknd
+      ? ["🛡️ WEEKEND. SHIELDS UP FIRST, SOLDIER.", "DEFENSE AND MAINTENANCE TAKE PRIORITY TODAY.", "ATTACKERS ARE ON STANDBY — EARN YOUR PLAYTIME."]
+      : ["⚔️ WEEKDAY. ATTACK MODE ENGAGED.", "STRIKE TARGETS FIRST, THEN MAINTAIN THE LINE.", "NO EXCUSES. EXECUTE."];
+    msgs.push(mkCoach(greetings[0]));
+    msgs.push(mkCoach(greetings[1]));
+    for (const tk of order) {
+      const fp = (state.fieldPlayers || {})[tk] || [];
+      const allSubs = state.subteams[tk] || [];
+      const subs = fp.length > 0 ? allSubs.filter(s => fp.includes(s.id)) : allSubs;
+      if (!subs.length) continue;
+      const label = tk === "attackers" ? "⚔️ ATTACKERS" : tk === "midPlayers" ? "⚡ MID PLAYERS" : "🛡️ DEFENDERS";
+      let total = 0, done = 0;
+      for (const sub of subs) {
+        if (tk === "attackers") {
+          const fIds = ((state.focusedTasks || {})[sub.id] || []);
+          const vis = fIds.length > 0 ? sub.tasks.filter(t => fIds.includes(t.id)) : sub.tasks;
+          total += countAllTasks(vis); done += countDoneTasks(vis);
+        } else {
+          total += sub.tasks.length; done += sub.tasks.filter(t => t.done).length;
+        }
+      }
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      msgs.push(mkCoach(label + " — " + done + "/" + total + " COMPLETE (" + pct + "%)", { type: "team_summary", teamKey: tk }));
+    }
+    msgs.push(mkCoach("💰 CREDITS: ⚔️" + state.credits.attackers + " | ⚡" + state.credits.midPlayers + " | 🛡️" + state.credits.defenders));
+    msgs.push(mkCoach(greetings[2]));
+    msgs.push(mkCoach("TYPE A NEW TASK AND I'LL ROUTE IT, OR TAP BELOW TO INSPECT A TEAM. 👇", { type: "quick_actions" }));
+    setChatMessages(msgs);
+    setChatStep("idle");
+  }, [loaded, homeMode, state, chatMessages.length]);
+
+  const handleChatSubmit = useCallback(() => {
+    if (!chatInput.trim()) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    if (chatStep === "awaiting_confirm" && chatPendingTask) setChatPendingTask(null);
+    setChatMessages(prev => [...prev, mkUser(text)]);
+    const lower = text.toLowerCase();
+    if (lower.match(/^(show|list|view)\s+(attacker|attack|mid|defender|defense)/)) {
+      const tk = lower.includes("attack") ? "attackers" : lower.includes("mid") ? "midPlayers" : "defenders";
+      const label = tk === "attackers" ? "⚔️ ATTACKERS" : tk === "midPlayers" ? "⚡ MID PLAYERS" : "🛡️ DEFENDERS";
+      setTimeout(() => setChatMessages(prev => [...prev, mkCoach(label + " — FULL ROSTER:", { type: "show_tasks", teamKey: tk })]), 200);
+      return;
+    }
+    const results = classifyNB(text, nbModelRef.current);
+    const top3 = results.slice(0, 3).filter(r => r.confidence > 0.05);
+    if (top3.length > 0) {
+      setChatSuggestions(top3);
+      setChatPendingTask({ text });
+      setChatStep("awaiting_confirm");
+      setTimeout(() => setChatMessages(prev => [...prev, mkCoach("🧠 NAIVE BAYES: " + top3.length + " MATCH" + (top3.length > 1 ? "ES" : "") + ":", { type: "suggestions", suggestions: top3, taskText: text })]), 300);
+    } else {
+      setChatPendingTask({ text });
+      setChatStep("awaiting_confirm");
+      setTimeout(() => setChatMessages(prev => [...prev, mkCoach("⚠️ LOW CONFIDENCE — PICK MANUALLY:", { type: "manual_pick", taskText: text })]), 300);
+    }
+  }, [chatInput, chatStep, chatPendingTask, state]);
+
+  const confirmTaskRoute = useCallback((teamKey, subId, text) => {
+    addTask(teamKey, subId, text);
+    const label = teamKey === "attackers" ? "⚔️ ATTACKERS" : teamKey === "midPlayers" ? "⚡ MID PLAYERS" : "🛡️ DEFENDERS";
+    const subName = state?.subteams?.[teamKey]?.find(s => s.id === subId)?.name || subId;
+    setChatMessages(prev => [...prev, mkCoach("✅ DEPLOYED \"" + text.toUpperCase() + "\" → " + label + " / " + subName + ". DONE.")]);
+    setChatPendingTask(null);
+    setChatSuggestions([]);
+    setChatStep("idle");
+  }, [addTask, state]);
+
+  const showTeamInChat = useCallback((tk) => {
+    const label = tk === "attackers" ? "⚔️ ATTACKERS" : tk === "midPlayers" ? "⚡ MID PLAYERS" : "🛡️ DEFENDERS";
+    setChatMessages(prev => [...prev, mkCoach(label + " — FULL ROSTER:", { type: "show_tasks", teamKey: tk })]);
+  }, []);
+
+  const getSubName = (tk, sid) => {
+    const sub = state?.subteams?.[tk]?.find(s => s.id === sid);
+    return sub ? sub.name : sid;
+  };
+  const chatTeamLabel = (tk) => tk === "attackers" ? "⚔️ ATTACKERS" : tk === "midPlayers" ? "⚡ MID PLAYERS" : tk === "defenders" ? "🛡️ DEFENDERS" : tk;
+
+  if (!loaded || !state) return (
+    <div style={{background:"#080B12",color:"#fff",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{textAlign:"center"}}><div style={{fontSize:48,marginBottom:16}}>⚽</div><div style={{fontFamily:"'Space Mono',monospace",fontSize:12,letterSpacing:6,opacity:0.4}}>ASSEMBLING SQUAD...</div></div>
+    </div>
+  );
+
+  const fullLocked = state.lockdown && new Date() < new Date(state.lockdown.until) && !state.lockdown.resolved;
+  const inp = (tk) => ({background:T.inputBg,border:`1px solid ${T.inputBrd}`,color:T.text,padding:"8px 12px",borderRadius:P_ALL[tk||"coach"].btnStyle.borderRadius,fontSize:13,fontFamily:P_ALL[tk||"coach"].bodyFont,outline:"none",width:"100%"});
+  const btn = (tk,color) => ({background:color||T.surface,border:"none",color:color&&color!=="transparent"?"#fff":T.text,padding:"8px 16px",cursor:"pointer",fontFamily:P_ALL[tk||"coach"].font,transition:"all 0.15s",...P_ALL[tk||"coach"].btnStyle});
+
+  /* ─── FOOTBALL FIELD ─── */
+  const getFormation = (count) => {
+    // Symmetric positions around x=50%, distributed vertically within a zone
+    const F = {
+      1: [{x:50,y:50}],
+      2: [{x:35,y:50},{x:65,y:50}],
+      3: [{x:22,y:55},{x:50,y:40},{x:78,y:55}],
+      4: [{x:18,y:55},{x:40,y:40},{x:60,y:40},{x:82,y:55}],
+      5: [{x:15,y:58},{x:35,y:42},{x:50,y:35},{x:65,y:42},{x:85,y:58}],
+      6: [{x:15,y:58},{x:35,y:42},{x:50,y:32},{x:65,y:42},{x:85,y:58},{x:50,y:55}],
+      7: [{x:12,y:60},{x:30,y:42},{x:50,y:30},{x:70,y:42},{x:88,y:60},{x:35,y:58},{x:65,y:58}],
+      8: [{x:12,y:62},{x:28,y:45},{x:44,y:32},{x:56,y:32},{x:72,y:45},{x:88,y:62},{x:35,y:58},{x:65,y:58}],
+      9: [{x:10,y:62},{x:25,y:48},{x:40,y:35},{x:50,y:28},{x:60,y:35},{x:75,y:48},{x:90,y:62},{x:33,y:60},{x:67,y:60}],
+      10:[{x:10,y:64},{x:24,y:50},{x:38,y:36},{x:50,y:26},{x:62,y:36},{x:76,y:50},{x:90,y:64},{x:30,y:62},{x:50,y:56},{x:70,y:62}],
+    };
+    return F[Math.min(count, 10)] || F[1];
+  };
+
+  // Map formation positions into team zones on the pitch
+  const getZonePositions = (team, subs) => {
+    const count = subs.length;
+    if (count === 0) return [];
+    const base = getFormation(count);
+    const zoneMap = { attackers: {yOff:2,yScale:0.28}, midPlayers: {yOff:32,yScale:0.32}, defenders: {yOff:66,yScale:0.30} };
+    const z = zoneMap[team];
+    return base.map(p => ({
+      x: p.x,
+      y: z.yOff + (p.y / 100) * (z.yScale * 100),
+    }));
+  };
+
+  const toggleFieldPlayer = (tk, subId) => {
+    setState(prev => {
+      const fp = prev.fieldPlayers || {attackers:[],midPlayers:[],defenders:[]};
+      const arr = fp[tk] || [];
+      return {...prev, fieldPlayers: {...fp, [tk]: arr.includes(subId) ? arr.filter(id => id !== subId) : [...arr, subId]}};
+    });
+  };
+
+  const renderPlayerCircle = (sub, tk, size, showLabel) => {
+    const C = TC(tk); const P = P_ALL[tk];
+    const shade = C.shades[sub.color % C.shades.length];
+    return (
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+        <div style={{
+          background:`radial-gradient(circle at 35% 35%, ${shade}, ${shade}cc)`,
+          border:"3px solid rgba(255,255,255,0.9)", borderRadius:"50%",
+          width:size, height:size, display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow:"0 2px 8px rgba(0,0,0,0.4), inset 0 -2px 4px rgba(0,0,0,0.2)",
+        }}>
+          <span style={{
+            fontSize: size > 36 ? 9 : 7, fontFamily: P.font, color:"#fff", textAlign:"center",
+            lineHeight:"1.1", letterSpacing:0.3, fontWeight:700, textShadow:"0 1px 2px rgba(0,0,0,0.5)",
+          }}>
+            {sub.name.substring(0,3)}
+          </span>
+        </div>
+        {showLabel && (
+          <span style={{
+            fontSize:7, fontFamily:P.bodyFont, color:"#fff", textAlign:"center",
+            textShadow:"0 1px 3px rgba(0,0,0,0.8)", maxWidth:56, overflow:"hidden",
+            textOverflow:"ellipsis", whiteSpace:"nowrap", letterSpacing:0.5,
+          }}>
+            {sub.name}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const renderField = () => {
+    const weekDates = getWeekDates();
+    const getPlanned = (tk) => state.weeklyPlan[`${fieldDay}_${tk}`] || [];
+    const allTeams = ["attackers","midPlayers","defenders"];
+    const pitchHeight = 400;
+
+    // Collect all deployed players across all teams
+    const allDeployed = {};
+    allTeams.forEach(tk => {
+      const ids = (state.fieldPlayers||{})[tk] || [];
+      allDeployed[tk] = state.subteams[tk].filter(sub => ids.includes(sub.id));
+    });
+    const totalOnPitch = Object.values(allDeployed).reduce((a, arr) => a + arr.length, 0);
+
+    return (
+      <div style={{background:T.cardBg,borderRadius:P_ALL.coach.cardRadius,padding:16,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{...P_ALL.coach.labelStyle,color:T.textMut}}>⚽ TACTICAL BOARD — WEEKLY FORMATION</div>
+          <div style={{fontFamily:P_ALL.coach.font,fontSize:9,color:T.textMut,letterSpacing:1}}>
+            {totalOnPitch} ON PITCH
+          </div>
+        </div>
+
+        {/* Day selector */}
+        <div style={{display:"flex",gap:4,marginBottom:14,flexWrap:"wrap"}}>
+          {weekDates.map(d => (
+            <button key={d.key} onClick={() => setFieldDay(d.key)} style={{
+              background:d.key===fieldDay?TC("coach").base:d.isWeekend?T.surface:"transparent",
+              border:`1px solid ${d.key===fieldDay?TC("coach").base:d.isWeekend?T.borderStr:T.border}`,
+              color:d.key===fieldDay?"#fff":d.isToday?TC("coach").base:T.textSec,
+              padding:"6px 10px",borderRadius:4,cursor:"pointer",textAlign:"center",minWidth:44,
+              fontFamily:P_ALL.coach.font,fontSize:10,letterSpacing:1,
+            }}>
+              <div style={{fontWeight:700}}>{d.label}</div>
+              <div style={{fontSize:9,opacity:0.7,marginTop:2}}>{d.date}</div>
+              {d.isWeekend && <div style={{fontSize:7,opacity:0.5,marginTop:1}}>STRICT</div>}
+            </button>
+          ))}
+        </div>
+
+        {/* Team Tabs - deploy team first */}
+        <div style={{display:"flex",gap:6,marginBottom:10}}>
+          {allTeams.map(tk => {
+            const isActive = fieldSelected === tk;
+            const C = TC(tk); const P = P_ALL[tk];
+            const deployed = (((state.fieldPlayers||{})[tk])||[]).length;
+            const total = state.subteams[tk].length;
+            return (
+              <button key={tk} onClick={() => setFieldSelected(isActive ? null : tk)} style={{
+                flex:1, background:isActive ? C.base : T.surface,
+                border:`2px solid ${isActive ? C.base : C.border}`,
+                borderRadius:6, padding:"8px 4px", cursor:"pointer", textAlign:"center",
+                transition:"all 0.2s",
+              }}>
+                <div style={{fontSize:14,marginBottom:2}}>{getTeamIcon(tk)}</div>
+                <div style={{fontFamily:P.font,fontSize:9,color:isActive?"#fff":C.base,letterSpacing:1,...P.titleStyle,fontSize:9}}>
+                  {P.nameDisplay}
+                </div>
+                <div style={{fontSize:8,color:isActive?"rgba(255,255,255,0.7)":T.textMut,marginTop:2,fontFamily:P_ALL.coach.font}}>
+                  {deployed}/{total} deployed
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Sub-team pills for selected team - like the category filter */}
+        {fieldSelected && (
+          <div style={{marginBottom:12}}>
+            <div style={{fontFamily:P_ALL[fieldSelected].font,fontSize:10,color:T.textMut,letterSpacing:2,marginBottom:8,...P_ALL[fieldSelected].labelStyle}}>
+              {fieldSelected === "attackers" ? "SELECT UNITS TO DEPLOY" : fieldSelected === "defenders" ? "SELECT SECTORS TO ACTIVATE" : "Select players for the field"}
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {state.subteams[fieldSelected].map(sub => {
+                const isDeployed = (((state.fieldPlayers||{})[fieldSelected])||[]).includes(sub.id);
+                const C = TC(fieldSelected); const P = P_ALL[fieldSelected];
+                const shade = C.shades[sub.color % C.shades.length];
+                const planned = getPlanned(fieldSelected).length;
+                return (
+                  <button key={sub.id} onClick={() => toggleFieldPlayer(fieldSelected, sub.id)} style={{
+                    display:"flex", alignItems:"center", gap:6,
+                    background: isDeployed ? shade : T.surface,
+                    border: `2px solid ${isDeployed ? shade : T.borderStr}`,
+                    borderRadius: 20, padding:"6px 14px 6px 8px", cursor:"pointer",
+                    transition:"all 0.2s",
+                  }}>
+                    {/* Mini player circle */}
+                    <div style={{
+                      width:22, height:22, borderRadius:"50%",
+                      background: isDeployed ? "rgba(255,255,255,0.25)" : `radial-gradient(circle, ${shade}, ${shade}cc)`,
+                      border: isDeployed ? "2px solid rgba(255,255,255,0.6)" : `2px solid ${shade}40`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:7, color: isDeployed ? "#fff" : shade, fontWeight:700,
+                      fontFamily:P.font,
+                    }}>
+                      {sub.name.substring(0,2)}
+                    </div>
+                    <span style={{
+                      fontFamily:P.bodyFont, fontSize:12, fontWeight:600, letterSpacing:0.5,
+                      color: isDeployed ? "#fff" : T.text,
+                    }}>
+                      {sub.name}
+                    </span>
+                    {/* Task count badge */}
+                    <span style={{
+                      background: isDeployed ? "rgba(255,255,255,0.25)" : T.border,
+                      color: isDeployed ? "#fff" : T.textMut,
+                      borderRadius:10, padding:"1px 6px", fontSize:9, fontWeight:700,
+                      fontFamily:P_ALL.coach.font, marginLeft:2,
+                    }}>
+                      {sub.tasks.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ══ THE PITCH ══ */}
+        <div style={{
+          background:T.fieldBg, borderRadius:8, position:"relative", overflow:"hidden",
+          border:`2px solid ${T.fieldLine}`, height:pitchHeight,
+        }}>
+          {/* Grass stripes */}
+          {[0,1,2,3,4,5,6,7].map(i => (
+            <div key={i} style={{position:"absolute",top:`${i*12.5}%`,left:0,right:0,height:"12.5%",background:i%2===0?T.fieldGrass:"transparent",opacity:0.25}} />
+          ))}
+          {/* Field markings */}
+          <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+            <div style={{position:"absolute",top:"50%",left:"5%",right:"5%",height:1,background:T.fieldLine}} />
+            <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:50,height:50,borderRadius:"50%",border:`1px solid ${T.fieldLine}`}} />
+            <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:5,height:5,borderRadius:"50%",background:T.fieldLine}} />
+            <div style={{position:"absolute",top:0,left:"20%",width:"60%",height:"14%",borderBottom:`1px solid ${T.fieldLine}`,borderLeft:`1px solid ${T.fieldLine}`,borderRight:`1px solid ${T.fieldLine}`}} />
+            <div style={{position:"absolute",top:0,left:"35%",width:"30%",height:"6%",borderBottom:`1px solid ${T.fieldLine}`,borderLeft:`1px solid ${T.fieldLine}`,borderRight:`1px solid ${T.fieldLine}`}} />
+            <div style={{position:"absolute",bottom:0,left:"20%",width:"60%",height:"14%",borderTop:`1px solid ${T.fieldLine}`,borderLeft:`1px solid ${T.fieldLine}`,borderRight:`1px solid ${T.fieldLine}`}} />
+            <div style={{position:"absolute",bottom:0,left:"35%",width:"30%",height:"6%",borderTop:`1px solid ${T.fieldLine}`,borderLeft:`1px solid ${T.fieldLine}`,borderRight:`1px solid ${T.fieldLine}`}} />
+            {/* Zone labels */}
+            {allDeployed.attackers.length > 0 && <div style={{position:"absolute",top:"3%",left:"50%",transform:"translateX(-50%)",fontSize:8,fontFamily:P_ALL.coach.font,color:T.fieldLine,letterSpacing:3,opacity:0.5}}>ATK</div>}
+            {allDeployed.midPlayers.length > 0 && <div style={{position:"absolute",top:"48%",left:"5%",fontSize:8,fontFamily:P_ALL.coach.font,color:T.fieldLine,letterSpacing:3,opacity:0.4}}>MID</div>}
+            {allDeployed.defenders.length > 0 && <div style={{position:"absolute",bottom:"3%",left:"50%",transform:"translateX(-50%)",fontSize:8,fontFamily:P_ALL.coach.font,color:T.fieldLine,letterSpacing:3,opacity:0.5}}>DEF</div>}
+          </div>
+
+          {/* Players on pitch */}
+          <div style={{position:"absolute",inset:0,zIndex:2}}>
+            {allTeams.map(tk => {
+              const deployed = allDeployed[tk];
+              if (deployed.length === 0) return null;
+              const positions = getZonePositions(tk, deployed);
+              return deployed.map((sub, i) => {
+                const pos = positions[i] || {x:50,y:50};
+                return (
+                  <div key={sub.id} style={{
+                    position:"absolute", left:`${pos.x}%`, top:`${pos.y}%`,
+                    transform:"translate(-50%,-50%)", zIndex:3,
+                    transition:"all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                  }}>
+                    {renderPlayerCircle(sub, tk, 40, true)}
+                  </div>
+                );
+              });
+            })}
+          </div>
+
+          {/* Empty pitch message */}
+          {totalOnPitch === 0 && (
+            <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>
+              <div style={{textAlign:"center",opacity:0.45}}>
+                <div style={{fontSize:32,marginBottom:8}}>⚽</div>
+                <div style={{fontFamily:P_ALL.coach.font,fontSize:10,color:"#fff",letterSpacing:3,textShadow:"0 1px 4px rgba(0,0,0,0.5)"}}>
+                  PITCH EMPTY
+                </div>
+                <div style={{fontFamily:P_ALL.coach.font,fontSize:8,color:"#fff",letterSpacing:2,marginTop:4,opacity:0.6}}>
+                  SELECT A TEAM & DEPLOY PLAYERS
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sideline Coach + bench players */}
+          <div style={{
+            position:"absolute", right:0, top:0, bottom:0, width:40,
+            background:"rgba(0,0,0,0.25)", borderLeft:`1px dashed ${T.fieldLine}`,
+            display:"flex", flexDirection:"column", alignItems:"center",
+            paddingTop:8, gap:4, zIndex:4, overflow:"hidden",
+          }}>
+            <div style={{
+              width:24,height:24,borderRadius:"50%",
+              background:`radial-gradient(circle at 35% 35%, ${TC("coach").base}, ${TC("coach").base}cc)`,
+              border:"2px solid rgba(255,255,255,0.8)", display:"flex",alignItems:"center",justifyContent:"center",
+              boxShadow:"0 1px 4px rgba(0,0,0,0.3)", flexShrink:0,
+            }}>
+              <span style={{fontSize:10}}>📋</span>
+            </div>
+            <div style={{fontSize:6,color:"#fff",fontFamily:P_ALL.coach.font,letterSpacing:1,opacity:0.6}}>COACH</div>
+            <div style={{height:1,width:"60%",background:"rgba(255,255,255,0.15)",margin:"2px 0"}} />
+            {/* Bench: non-deployed players (small, faded) */}
+            {allTeams.map(tk => {
+              const benchSubs = state.subteams[tk].filter(sub => !(((state.fieldPlayers||{})[tk])||[]).includes(sub.id));
+              return benchSubs.map(sub => {
+                const shade = TC(tk).shades[sub.color % TC(tk).shades.length];
+                return (
+                  <div key={sub.id} style={{opacity:0.4,flexShrink:0}} title={sub.name}>
+                    <div style={{
+                      width:18,height:18,borderRadius:"50%",
+                      background:`radial-gradient(circle, ${shade}, ${shade}cc)`,
+                      border:"2px solid rgba(255,255,255,0.5)",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                    }}>
+                      <span style={{fontSize:5,color:"#fff",fontWeight:700,fontFamily:P_ALL[tk].font}}>{sub.name.substring(0,2)}</span>
+                    </div>
+                  </div>
+                );
+              });
+            })}
+          </div>
+        </div>
+
+        {/* Task planning panel for selected team */}
+        {fieldSelected && (((state.fieldPlayers||{})[fieldSelected])||[]).length > 0 && (
+          <div style={{marginTop:12,background:T.surface,borderRadius:6,padding:14,border:`1px solid ${TC(fieldSelected).border}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{fontFamily:P_ALL[fieldSelected].font,color:TC(fieldSelected).base,fontSize:13,...P_ALL[fieldSelected].titleStyle}}>
+                {getTeamIcon(fieldSelected)} {P_ALL[fieldSelected].nameDisplay} — {getWeekDates().find(d=>d.key===fieldDay)?.label} PLAN
+              </div>
+              <span style={{background:TC(fieldSelected).badge,color:"#fff",padding:"2px 8px",borderRadius:4,fontSize:10,fontFamily:P_ALL.coach.font}}>
+                {(state.weeklyPlan[`${fieldDay}_${fieldSelected}`]||[]).length} tasks
+              </span>
+            </div>
+
+            {(state.weeklyPlan[`${fieldDay}_${fieldSelected}`]||[]).map(task => (
+              <div key={task.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
+                <div onClick={() => togglePlanTask(fieldDay,fieldSelected,task.id)} style={{
+                  width:18,height:18,borderRadius:P_ALL[fieldSelected].checkRadius,
+                  border:`2px solid ${task.confirmed?TC(fieldSelected).base:T.chkOff}`,
+                  background:task.confirmed?TC(fieldSelected).base:"transparent",
+                  cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                }}>
+                  {task.confirmed && <span style={{color:"#fff",fontSize:10}}>✓</span>}
+                </div>
+                <span style={{fontFamily:P_ALL[fieldSelected].bodyFont,fontSize:12,color:T.text,flex:1,opacity:task.confirmed?0.5:1}}>
+                  {task.text}
+                </span>
+                <button onClick={() => removePlanTask(fieldDay,fieldSelected,task.id)}
+                  style={{background:"transparent",border:"none",color:T.rmBtn,cursor:"pointer",fontSize:14}}>×</button>
+              </div>
+            ))}
+
+            <div style={{display:"flex",gap:6,marginTop:8}}>
+              <input style={{...inp(fieldSelected),flex:1,fontSize:12,padding:"6px 10px"}}
+                placeholder={fieldSelected==="attackers"?"PLAN TARGET...":fieldSelected==="defenders"?"PLAN PROTOCOL...":"Plan task..."}
+                value={editPlanTask} onChange={e => setEditPlanTask(e.target.value)}
+                onKeyDown={e => {if(e.key==="Enter"&&editPlanTask.trim()){addWeeklyPlanTask(fieldDay,fieldSelected,editPlanTask.trim());setEditPlanTask("");}}} />
+              <button style={{...btn(fieldSelected,TC(fieldSelected).base),padding:"6px 12px",fontSize:10}}
+                onClick={() => {if(editPlanTask.trim()){addWeeklyPlanTask(fieldDay,fieldSelected,editPlanTask.trim());setEditPlanTask("");}}}>
+                {fieldSelected==="attackers"?"DEPLOY":fieldSelected==="defenders"?"SECURE":"ADD"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /* ─── CHAT RENDERER ─── */
+  const renderChat = () => {
+    return (
+      <div style={{padding:16,maxWidth:620,margin:"0 auto"}}>
+        <div style={{textAlign:"center",padding:"20px 0"}}>
+          <div style={{fontSize:22,marginBottom:8}}>📋</div>
+          <div style={{fontFamily:P_ALL.coach.font,fontSize:14,color:TC("coach").base,letterSpacing:3}}>COACH BRIEFING</div>
+          <div style={{fontSize:9,color:T.textMut,letterSpacing:2,marginTop:4}}>
+            {isWeekend() ? "WEEKEND — DEFENSE FIRST" : "WEEKDAY — ATTACK FIRST"}
+          </div>
+        </div>
+        <div style={{marginBottom:12}}>
+          {chatMessages.map((msg, i) => (
+            <div key={msg.id || i} style={{
+              display:"flex", justifyContent:msg.from==="coach"?"flex-start":"flex-end",
+              marginBottom:8,
+            }}>
+              <div style={{
+                maxWidth:"88%", padding:"10px 14px",
+                borderRadius:msg.from==="coach"?"2px 14px 14px 14px":"14px 2px 14px 14px",
+                background:msg.from==="coach" ? T.cardBg : TC("coach").base+"20",
+                border:"1px solid " + (msg.from==="coach" ? T.border : TC("coach").base+"40"),
+              }}>
+                {msg.from==="coach" && <div style={{fontSize:7,fontFamily:P_ALL.coach.font,color:TC("coach").base,letterSpacing:2,marginBottom:4}}>COACH</div>}
+                <div style={{fontSize:12,color:T.text,lineHeight:1.5}}>{msg.content}</div>
+                {msg.data && msg.data.type === "team_summary" && msg.data.teamKey && state && state.subteams && state.subteams[msg.data.teamKey] && (
+                  <div style={{marginTop:6}}>
+                    {state.subteams[msg.data.teamKey].map(sub => {
+                      const col = TC(msg.data.teamKey).shades ? TC(msg.data.teamKey).shades[sub.color % TC(msg.data.teamKey).shades.length] : TC(msg.data.teamKey).base;
+                      const t2 = msg.data.teamKey==="attackers" ? countAllTasks(sub.tasks) : sub.tasks.length;
+                      const d2 = msg.data.teamKey==="attackers" ? countDoneTasks(sub.tasks) : sub.tasks.filter(x=>x.done).length;
+                      return (
+                        <div key={sub.id} style={{display:"flex",alignItems:"center",gap:6,padding:"2px 0"}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:col}} />
+                          <span style={{fontSize:10,color:col,flex:1}}>{sub.name}</span>
+                          <span style={{fontSize:9,color:T.textMut}}>{d2}/{t2}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {msg.data && msg.data.type === "quick_actions" && (
+                  <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:5}}>
+                    {["attackers","midPlayers","defenders"].map(tk => (
+                      <button key={tk} onClick={()=>showTeamInChat(tk)} style={{
+                        background:TC(tk).base+"15",border:"1.5px solid "+TC(tk).base+"40",
+                        color:TC(tk).base,padding:"6px 12px",borderRadius:14,
+                        cursor:"pointer",fontSize:9,fontWeight:600,letterSpacing:1,
+                      }}>SHOW {tk==="attackers"?"⚔️ ATK":tk==="midPlayers"?"⚡ MID":"🛡️ DEF"}</button>
+                    ))}
+                  </div>
+                )}
+                {msg.data && msg.data.type === "show_tasks" && msg.data.teamKey && state && state.subteams[msg.data.teamKey] && (
+                  <div style={{marginTop:6}}>
+                    {state.subteams[msg.data.teamKey].map(sub => (
+                      <div key={sub.id} style={{marginBottom:6}}>
+                        <div style={{fontSize:9,color:TC(msg.data.teamKey).base,letterSpacing:1,marginBottom:2}}>{sub.name}</div>
+                        {sub.tasks.length===0 ? <div style={{fontSize:9,color:T.textMut,paddingLeft:8}}>No tasks</div> :
+                          sub.tasks.map(t=>(
+                            <div key={t.id} style={{display:"flex",alignItems:"center",gap:6,padding:"2px 0",paddingLeft:4}}>
+                              <div onClick={()=>completeTask(msg.data.teamKey,sub.id,t.id)} style={{width:14,height:14,borderRadius:4,border:"2px solid "+(t.done?TC(msg.data.teamKey).base:T.chkOff),background:t.done?TC(msg.data.teamKey).base:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                {t.done&&<span style={{color:"#fff",fontSize:7}}>✓</span>}
+                              </div>
+                              <span style={{fontSize:11,color:T.text,opacity:t.done?0.3:1,textDecoration:t.done?"line-through":"none"}}>{t.text}</span>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {msg.data && msg.data.type === "suggestions" && msg.data.suggestions && (
+                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
+                    {msg.data.suggestions.map((s, si) => (
+                      <button key={si} onClick={()=>confirmTaskRoute(s.teamKey, s.subId, msg.data.taskText)} style={{
+                        display:"flex",alignItems:"center",gap:8,padding:"8px 12px",
+                        background:si===0?TC(s.teamKey).base+"20":T.surface,
+                        border:"1.5px solid "+(si===0?TC(s.teamKey).base:T.borderStr),
+                        borderRadius:8,cursor:"pointer",width:"100%",textAlign:"left",
+                      }}>
+                        <span style={{fontSize:10,fontWeight:700,color:TC(s.teamKey).base,minWidth:36}}>{Math.round(s.confidence*100)}%</span>
+                        <span style={{fontSize:10,color:T.text,flex:1}}>{chatTeamLabel(s.teamKey)} / {getSubName(s.teamKey, s.subId)}</span>
+                        {si===0 && <span style={{fontSize:7,color:TC(s.teamKey).base,letterSpacing:1}}>TOP</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {msg.data && msg.data.type === "manual_pick" && msg.data.taskText && (
+                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:3}}>
+                    {["attackers","midPlayers","defenders"].map(tk2 =>
+                      (state.subteams[tk2]||[]).map(sub => (
+                        <button key={sub.id} onClick={()=>confirmTaskRoute(tk2, sub.id, msg.data.taskText)} style={{
+                          display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
+                          background:T.surface,border:"1px solid "+TC(tk2).base+"30",
+                          borderRadius:6,cursor:"pointer",width:"100%",textAlign:"left",
+                        }}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:TC(tk2).base}} />
+                          <span style={{fontSize:10,color:T.text}}>{sub.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{
+          display:"flex",gap:8,alignItems:"center",
+          padding:12,background:T.cardBg,
+          borderRadius:14,border:"1px solid "+T.border,
+          position:"sticky",bottom:60,
+        }}>
+          <input
+            style={{flex:1,border:"none",background:"transparent",fontSize:13,padding:"8px 4px",color:T.text,outline:"none"}}
+            placeholder="Type a task or command..."
+            value={chatInput}
+            onChange={e=>setChatInput(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter")handleChatSubmit();}}
+          />
+          <button onClick={handleChatSubmit} style={{
+            background:TC("coach").base,border:"none",color:"#fff",
+            padding:"8px 16px",borderRadius:10,cursor:"pointer",
+            fontSize:10,fontWeight:700,letterSpacing:2,
+          }}>SEND</button>
+        </div>
+      </div>
+    );
+  };
+
+  /* ─── DASHBOARD ─── */
+  const renderDash = () => {
+    const wknd = isWeekend();
+    return (
+      <div style={{padding:16,maxWidth:620,margin:"0 auto"}}>
+        <div style={{textAlign:"center",padding:"24px 16px 12px"}}>
+          <div style={{fontSize:30,marginBottom:10}}>{THEME_LIST.find(t=>t.id===(state.themeId==="auto"?autoTheme:state.themeId))?.icon||"⚽"}</div>
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:16,color:T.textSec,fontWeight:500}}>
+            {themeMode==="light"?"Time to play. Let's go.":"Night mode. Stay locked in."}
+          </div>
+        </div>
+        {fullLocked && (
+          <div style={{background:T.lockBg,border:`2px solid ${T.lockBrd}`,borderRadius:8,padding:24,marginBottom:20,textAlign:"center"}}>
+            <div style={{fontSize:36,marginBottom:8}}>🚨</div>
+            <div style={{fontFamily:P_ALL.coach.font,fontSize:18,fontWeight:700,color:T.lockBrd,letterSpacing:4,marginBottom:8}}>FULL TEAM LOCKDOWN</div>
+            <div style={{fontFamily:P_ALL.coach.font,fontSize:13,color:T.textSec,marginBottom:16}}>TRIGGERED BY: {getTeamLabel(state.lockdown.triggeredBy)}</div>
+            <button style={btn("coach",TC("coach").base)} onClick={()=>setShowCoachSession(true)}>📋 COACH SESSION</button>
+          </div>
+        )}
+        <div style={{background:T.cardBg,border:`1px solid ${T.border}`,borderRadius:12,padding:18,marginBottom:20,boxShadow:T.shadow}}>
+          <div style={{fontFamily:P_ALL.coach.font,fontSize:12,letterSpacing:4,color:T.textMut,marginBottom:14}}>SCOREBOARD — {wknd?"⚠️ WEEKEND [STRICT]":"WEEKDAY [FLUID]"}</div>
+          <div style={{display:"flex",gap:8}}>
+            {["attackers","midPlayers","defenders"].map(tk => {
+              const comp=getComp(tk);const min=getMin(tk);const met=comp>=min;const P=P_ALL[tk];const C=TC(tk);
+              return (<div key={tk} style={{flex:1,background:C.lighter,padding:14,textAlign:"center",border:`${P.borderWidth}px solid ${met?T.ok+"30":C.border}`,borderRadius:P.cardRadius}}>
+                <div style={{fontSize:20,marginBottom:6}}>{getTeamIcon(tk)}</div>
+                <div style={{fontFamily:P.font,...P.labelStyle,color:T.textMut,marginBottom:8,fontSize:8}}>{P.nameDisplay}</div>
+                <div style={{fontFamily:P.font,fontSize:tk==="defenders"?22:28,fontWeight:700,color:C.base}}>{state.credits[tk]}</div>
+                <div style={{fontFamily:P.bodyFont,fontSize:9,color:T.textMut,letterSpacing:2,marginTop:2}}>PTS</div>
+                <div style={{marginTop:8,fontFamily:P.bodyFont,fontSize:11,fontWeight:600,color:met?T.ok:T.warn}}>{comp}/{min}</div>
+              </div>);
+            })}
+          </div>
+        </div>
+        {["attackers","midPlayers","defenders"].map(tk => {
+          const lk=isLkd(tk);const P=P_ALL[tk];const C=TC(tk);
+          const fp = (state.fieldPlayers||{})[tk] || [];
+          const hasFocus = fp.length > 0;
+          const focusedSubs = hasFocus ? state.subteams[tk].filter(s => fp.includes(s.id)) : state.subteams[tk];
+          const allSubs = state.subteams[tk];
+          const total=tk==="attackers"?focusedSubs.reduce((a,s)=>{const fIds=((state.focusedTasks||{})[s.id]||[]);const vis=fIds.length>0?s.tasks.filter(t=>fIds.includes(t.id)):s.tasks;return a+countAllTasks(vis);},0):focusedSubs.reduce((a,s)=>a+s.tasks.length,0);
+          const done=tk==="attackers"?focusedSubs.reduce((a,s)=>{const fIds=((state.focusedTasks||{})[s.id]||[]);const vis=fIds.length>0?s.tasks.filter(t=>fIds.includes(t.id)):s.tasks;return a+countDoneTasks(vis);},0):focusedSubs.reduce((a,s)=>a+s.tasks.filter(t=>t.done).length,0);
+          const allTotal=tk==="attackers"?allSubs.reduce((a,s)=>a+countAllTasks(s.tasks),0):allSubs.reduce((a,s)=>a+s.tasks.length,0);
+          const allDone=tk==="attackers"?allSubs.reduce((a,s)=>a+countDoneTasks(s.tasks),0):allSubs.reduce((a,s)=>a+s.tasks.filter(t=>t.done).length,0);
+          return (<div key={tk} style={{background:C.card,borderRadius:P.cardRadius,border:`${P.borderWidth}px solid ${C.border}`,borderLeft:`${P.borderWidth+2}px solid ${C.base}`,padding:18,marginBottom:14,opacity:lk?0.3:1,transition:"all 0.3s",boxShadow:T.shadow}}>            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+                  <span style={{fontSize:22}}>{getTeamIcon(tk)}</span>
+                  <span style={{fontFamily:P.font,...P.titleStyle,fontSize:tk==="defenders"?15:17,color:C.base}}>{P.nameDisplay}</span>
+                  {lk&&<span style={{background:T.lockBrd,color:"#fff",padding:"2px 8px",borderRadius:P.btnStyle.borderRadius,fontSize:9,letterSpacing:2,fontFamily:P.font}}>LOCKED</span>}
+                  {hasFocus&&<span style={{background:TC("coach").base,color:"#fff",padding:"2px 8px",borderRadius:10,fontSize:8,letterSpacing:1,fontFamily:P_ALL.coach.font}}>🎯 FOCUSED</span>}
+                </div>
+                <div style={{fontFamily:P.bodyFont,fontSize:11,color:T.textMut}}>{P.tagline}</div>
+              </div>
+              <div style={{background:C.badge,color:"#fff",padding:"6px 14px",borderRadius:P.btnStyle.borderRadius,fontFamily:P.font,fontSize:13,fontWeight:700}}>{state.credits[tk]}</div>
+            </div>
+            {/* Focused sub-team pills */}
+            {hasFocus && (
+              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:10}}>
+                {focusedSubs.map(sub => {
+                  const shade = C.shades[sub.color % C.shades.length];
+                  const subFocusIds = tk === "attackers" ? ((state.focusedTasks||{})[sub.id]||[]) : [];
+                  const hasSubFocus = tk === "attackers" && subFocusIds.length > 0;
+                  const visTasks = hasSubFocus ? sub.tasks.filter(t => subFocusIds.includes(t.id)) : sub.tasks;
+                  const subDone = tk === "attackers" ? countDoneTasks(visTasks) : sub.tasks.filter(t=>t.done).length;
+                  const subTotal = tk === "attackers" ? countAllTasks(visTasks) : sub.tasks.length;
+                  return (
+                    <div key={sub.id} style={{
+                      display:"flex",alignItems:"center",gap:4,
+                      background:shade+"18",border:`1px solid ${shade}35`,
+                      borderRadius:14,padding:"3px 10px 3px 6px",
+                    }}>
+                      <div style={{width:14,height:14,borderRadius:"50%",background:shade,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{fontSize:6,color:"#fff",fontWeight:700,fontFamily:P.font}}>{sub.name.substring(0,2)}</span>
+                      </div>
+                      <span style={{fontFamily:P.bodyFont,fontSize:10,color:shade,fontWeight:600}}>{sub.name}</span>
+                      {hasSubFocus && <span style={{fontSize:8}}>🎯</span>}
+                      <span style={{fontSize:9,color:T.textMut,fontFamily:P_ALL.coach.font}}>{subDone}/{subTotal}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{fontFamily:P.bodyFont,fontSize:11,color:T.textMut,marginTop:10}}>
+              {hasFocus
+                ? `${focusedSubs.length}/${allSubs.length} ${tk==="defenders"?"SECTORS":tk==="attackers"?"UNITS":"sub-teams"} focused · ${done}/${total} ${tk==="defenders"?"SECURED":tk==="attackers"?"CRUSHED":"done"}`
+                : `${allSubs.length} ${tk==="defenders"?"SECTORS":tk==="attackers"?"UNITS":"sub-teams"} · ${allDone}/${allTotal} ${tk==="defenders"?"SECURED":tk==="attackers"?"CRUSHED":"done"}`
+              }
+            </div>
+            {/* Inline focused tasks — work from home */}
+            {hasFocus && (
+              <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+                {focusedSubs.map(sub => {
+                  const shade = C.shades[sub.color % C.shades.length];
+                  // For attackers, apply task-level focus filter
+                  const subFocusIds = tk === "attackers" ? ((state.focusedTasks||{})[sub.id]||[]) : [];
+                  const hasTaskFocus = tk === "attackers" && subFocusIds.length > 0;
+                  const visibleTasks = hasTaskFocus ? sub.tasks.filter(t => subFocusIds.includes(t.id)) : sub.tasks;
+                  const subTaskCount = tk === "attackers" ? countAllTasks(visibleTasks) : visibleTasks.length;
+                  if (subTaskCount === 0) return null;
+
+                  // Compact recursive renderer for dashboard
+                  const renderDashTask = (task, depth = 0) => {
+                    const hasKids = task.children?.length > 0;
+                    const taskLinks = task.links || [];
+                    const dColor = C.shades[(sub.color + depth) % C.shades.length];
+                    const dTag = task.tagId ? (state.tags||[]).find(t=>t.id===task.tagId) : null;
+                    return (
+                      <div key={task.id}>
+                        <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 0",paddingLeft:depth*16}}>
+                          {depth > 0 && <div style={{width:8,height:8,borderLeft:`1.5px solid ${dColor}40`,borderBottom:`1.5px solid ${dColor}40`,borderRadius:"0 0 0 3px",flexShrink:0,marginLeft:-6}} />}
+                          <div onClick={()=>completeTask(tk,sub.id,task.id)} style={{
+                            width:Math.max(14,18-depth*2),height:Math.max(14,18-depth*2),
+                            borderRadius:P.checkRadius,border:`2px solid ${task.done?dColor:T.chkOff}`,
+                            background:task.done?dColor:"transparent",cursor:"pointer",
+                            display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                          }}>
+                            {task.done&&<span style={{color:"#fff",fontSize:Math.max(7,9-depth),fontWeight:700}}>{tk==="attackers"?"✕":"✓"}</span>}
+                          </div>
+                          {dTag && <span style={{background:dTag.color+"20",color:dTag.color,padding:"0px 5px",borderRadius:8,fontSize:6,fontFamily:P_ALL.coach.font,fontWeight:700,letterSpacing:0.5,flexShrink:0}}>{dTag.name}</span>}
+                          <span style={{fontFamily:P.bodyFont,fontSize:Math.max(10,12-depth),opacity:task.done?0.3:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{task.text}</span>
+                          {taskLinks.length > 0 && <span style={{fontSize:7,color:dColor,opacity:0.6}}>🔗{taskLinks.length}</span>}
+                          {hasKids && <span style={{fontSize:7,color:dColor,fontFamily:P_ALL.coach.font}}>{countDoneTasks(task.children)}/{countAllTasks(task.children)}</span>}
+                        </div>
+                        {/* Compact links */}
+                        {taskLinks.length > 0 && (
+                          <div style={{display:"flex",flexWrap:"wrap",gap:3,paddingLeft:depth*16+(depth>0?14:22),paddingBottom:2}}>
+                            {taskLinks.map(link => (
+                              <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer" style={{
+                                background:dColor+"10",border:`1px solid ${dColor}25`,
+                                color:dColor,padding:"1px 7px",borderRadius:10,
+                                fontSize:8,textDecoration:"none",fontFamily:P.font,letterSpacing:1,
+                              }}>⚡ {link.title}</a>
+                            ))}
+                          </div>
+                        )}
+                        {hasKids && task.children.map(c => renderDashTask(c, depth+1))}
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <div key={sub.id} style={{marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                        <span style={{fontFamily:P.font,...P.labelStyle,fontSize:8,color:shade}}>{sub.name}</span>
+                        {hasTaskFocus && <span style={{fontSize:7,color:TC("coach").base,fontFamily:P_ALL.coach.font,letterSpacing:1}}>🎯 {subFocusIds.length}/{sub.tasks.length}</span>}
+                      </div>
+                      {tk === "attackers" ? (
+                        visibleTasks.map(task => renderDashTask(task, 0))
+                      ) : (
+                        sub.tasks.map(task => (
+                        <div key={task.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0"}}>
+                          {task.isSleepTracker ? (
+                            <div style={{display:"flex",alignItems:"center",gap:6,flex:1,flexWrap:"wrap"}}>
+                              <span style={{fontFamily:P.bodyFont,fontSize:12,opacity:task.done?0.35:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>
+                                {tk==="defenders"?"🔒":"🌙"} {task.text} {task.sleepHours?`(${task.sleepHours}H)`:""}
+                              </span>
+                              {!task.done?(
+                                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                                  <input type="number" placeholder="HRS" value={sleepHours} onChange={e=>setSleepHours(e.target.value)} style={{...inp(tk),width:50,padding:"4px 6px",textAlign:"center",fontSize:11}} min="0" max="24" step="0.5"/>
+                                  <button style={{...btn(tk,shade),padding:"4px 10px",fontSize:9}} onClick={()=>{if(sleepHours){completeTask(tk,sub.id,task.id,sleepHours);setSleepHours("");}}}>{tk==="defenders"?"LOCK":"LOG"}</button>
+                                </div>
+                              ):(<button style={{...btn(tk,"transparent"),opacity:0.4,fontSize:8,color:T.textSec,padding:"2px 6px"}} onClick={()=>completeTask(tk,sub.id,task.id)}>UNDO</button>)}
+                            </div>
+                          ) : (
+                            <>
+                              <div onClick={()=>completeTask(tk,sub.id,task.id)} style={{width:18,height:18,borderRadius:P.checkRadius,border:`2px solid ${task.done?shade:T.chkOff}`,background:task.done?shade:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                {task.done&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>{tk==="defenders"?"🔒":"✓"}</span>}
+                              </div>
+                              <span style={{fontFamily:P.bodyFont,fontSize:12,opacity:task.done?0.3:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{task.text}</span>
+                            </>
+                          )}
+                        </div>
+                        ))
+                      )}
+                    </div>
+                  );
+                })}
+                <div style={{fontFamily:P_ALL.coach.font,fontSize:8,color:T.textMut,letterSpacing:2,marginTop:4,textAlign:"center",opacity:0.5}}>
+                  📋 COACH FOCUSED VIEW · USE NAV BAR FOR FULL ACCESS
+                </div>
+              </div>
+            )}
+          </div>);
+        })}
+        <div style={{background:TC("coach").card,borderRadius:P_ALL.coach.cardRadius,border:`1px solid ${TC("coach").border}`,borderLeft:`3px solid ${TC("coach").base}`,padding:18,cursor:"pointer",boxShadow:T.shadow}} onClick={()=>setView("coach")}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:22}}>📋</span>
+            <div><div style={{fontFamily:P_ALL.coach.font,...P_ALL.coach.titleStyle,fontSize:18,color:TC("coach").base}}>COACH</div>
+            <div style={{fontFamily:P_ALL.coach.bodyFont,fontSize:11,color:T.textMut,letterSpacing:2}}>{P_ALL.coach.tagline}</div></div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /* ─── TEAM VIEW ─── */
+  const renderTeam = () => {
+    if (!selectedTeam) return null; const tk=selectedTeam;const P=P_ALL[tk];const C=TC(tk);
+    return (
+      <div style={{padding:16,maxWidth:620,margin:"0 auto"}}>
+        <div style={{background:C.card,border:`${P.borderWidth}px solid ${C.border}`,borderRadius:P.cardRadius,padding:20,marginBottom:18,boxShadow:T.shadow}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><div style={{fontFamily:P.font,...P.labelStyle,color:T.textMut,marginBottom:6}}>{tk==="attackers"?"ASSAULT TEAM":tk==="defenders"?"DEFENSE SECTOR":"TEAM"}</div>
+              <div style={{fontFamily:P.font,...P.titleStyle,fontSize:tk==="defenders"?20:24,color:C.base}}>{getTeamIcon(tk)} {P.nameDisplay}</div>
+              <div style={{fontFamily:P.bodyFont,fontSize:11,color:T.textMut,marginTop:6}}>{P.tagline}</div></div>
+            <div style={{textAlign:"right"}}><div style={{fontFamily:P.font,fontSize:34,fontWeight:700,color:C.base}}>{state.credits[tk]}</div>
+              <div style={{fontFamily:P.bodyFont,...P.labelStyle,color:T.textMut}}>{tk==="defenders"?"SHIELD PTS":tk==="attackers"?"STRIKE PTS":"CREDITS"}</div></div>
+          </div>
+        </div>
+        <div style={{background:T.cardBg,borderRadius:P.cardRadius,padding:12,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",border:`${P.borderWidth}px solid ${T.border}`,boxShadow:T.shadow}}>
+          <span style={{fontFamily:P.bodyFont,...P.labelStyle,color:T.textSec,fontSize:10}}>{isWeekend()?(tk==="defenders"?"⚠️ WEEKEND — ALL SHIELDS UP":tk==="attackers"?"⚠️ WEEKEND — STAND DOWN":"Weekend — strict"):(tk==="defenders"?"WEEKDAY — MAINTAIN PERIMETER":tk==="attackers"?"WEEKDAY — ENGAGE":"Weekday — fluid")}</span>
+          <span style={{fontFamily:P.font,fontSize:14,fontWeight:700,color:getComp(tk)>=getMin(tk)?T.ok:T.warn}}>{getComp(tk)}/{getMin(tk)}</span>
+        </div>
+        {state.subteams[tk].map(sub => {
+          const shade=C.shades[sub.color%C.shades.length];
+          const taskTotal = tk === "attackers" ? countAllTasks(sub.tasks) : sub.tasks.length;
+          const taskDone = tk === "attackers" ? countDoneTasks(sub.tasks) : sub.tasks.filter(t=>t.done).length;
+
+          // Recursive attacker task renderer
+          const renderAttackerTask = (task, depth = 0) => {
+            const hasChildren = task.children?.length > 0;
+            const hasLinks = (task.links || []).length > 0;
+            const childDone = hasChildren ? countDoneTasks(task.children) : 0;
+            const childTotal = hasChildren ? countAllTasks(task.children) : 0;
+            const depthColors = [shade, C.shades[(sub.color+1)%C.shades.length], C.shades[(sub.color+2)%C.shades.length], C.shades[(sub.color+3)%C.shades.length]];
+            const dColor = depthColors[Math.min(depth, depthColors.length-1)];
+            const isAddingHere = addSubTo?.subId===sub.id && addSubTo?.parentId===task.id;
+            const isAddingLink = addLinkTo?.subId===sub.id && addLinkTo?.taskId===task.id;
+            const isPickingTag = tagPicker?.subId===sub.id && tagPicker?.taskId===task.id;
+            const taskTag = task.tagId ? (state.tags||[]).find(t=>t.id===task.tagId) : null;
+            return (
+              <div key={task.id}>
+                <div style={{
+                  display:"flex", alignItems:"center", gap:6, padding:"8px 0",
+                  paddingLeft: depth * 20,
+                  borderBottom:`1px solid ${T.border}`,
+                }}>
+                  {depth > 0 && (
+                    <div style={{width:12,height:12,borderLeft:`2px solid ${dColor}40`,borderBottom:`2px solid ${dColor}40`,borderRadius:"0 0 0 4px",flexShrink:0,marginLeft:-10}} />
+                  )}
+                  <div onClick={()=>completeTask(tk,sub.id,task.id)} style={{
+                    width: Math.max(16, 22 - depth*2), height: Math.max(16, 22 - depth*2),
+                    borderRadius:P.checkRadius, border:`2px solid ${task.done?dColor:T.chkOff}`,
+                    background:task.done?dColor:"transparent", cursor:"pointer",
+                    display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                  }}>
+                    {task.done&&<span style={{color:"#fff",fontSize:Math.max(8,11-depth),fontWeight:700}}>✕</span>}
+                  </div>
+                  {/* Tag pill */}
+                  {taskTag && (
+                    <button onClick={(e)=>{e.stopPropagation();setTagPicker(isPickingTag?null:{subId:sub.id,taskId:task.id});}} style={{
+                      background:taskTag.color+"20",border:`1.5px solid ${taskTag.color}50`,
+                      color:taskTag.color,padding:"1px 7px",borderRadius:10,
+                      fontSize:7,fontFamily:P_ALL.coach.font,fontWeight:700,letterSpacing:1,
+                      cursor:"pointer",flexShrink:0,whiteSpace:"nowrap",
+                    }}>{taskTag.name}</button>
+                  )}
+                  {!taskTag && (
+                    <button onClick={(e)=>{e.stopPropagation();setTagPicker(isPickingTag?null:{subId:sub.id,taskId:task.id});}} style={{
+                      background:"transparent",border:`1.5px dashed ${T.borderStr}`,
+                      color:T.textMut,padding:"1px 6px",borderRadius:10,
+                      fontSize:7,fontFamily:P_ALL.coach.font,cursor:"pointer",flexShrink:0,opacity:0.5,
+                    }}>TAG</button>
+                  )}
+                  <span style={{
+                    fontFamily:P.bodyFont,...P.taskStyle,
+                    fontSize: Math.max(10, 14 - depth), opacity:task.done?0.3:1,
+                    color:T.text, textDecoration:task.done?"line-through":"none", flex:1,
+                  }}>
+                    {task.text}
+                  </span>
+                  {hasLinks && (
+                    <span style={{fontSize:8,color:dColor,fontFamily:P_ALL.coach.font,opacity:0.7}}>🔗{task.links.length}</span>
+                  )}
+                  {hasChildren && (
+                    <span style={{
+                      background:dColor+"18", color:dColor, padding:"1px 6px",
+                      borderRadius:8, fontSize:8, fontFamily:P_ALL.coach.font, fontWeight:700,
+                    }}>
+                      {childDone}/{childTotal}
+                    </span>
+                  )}
+                  {depth === 0 && task.recurring && (
+                    <span style={{fontFamily:P.bodyFont,...P.labelStyle,fontSize:8,color:T.textMut}}>REPEAT</span>
+                  )}
+                  <button onClick={(e)=>{e.stopPropagation();setAddLinkTo({subId:sub.id,taskId:task.id});setTaskLinkTitle("");setTaskLinkUrl("");setAddSubTo(null);setTagPicker(null);}} style={{
+                    background:isAddingLink ? dColor : "transparent",
+                    border:`1.5px solid ${dColor}60`,
+                    color:isAddingLink ? "#fff" : dColor,
+                    cursor:"pointer", fontSize:8, fontWeight:700,
+                    borderRadius:4, width:22, height:22,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    flexShrink:0, transition:"all 0.15s", opacity:isAddingLink?1:0.6,
+                  }} title="Add link">🔗</button>
+                  <button onClick={(e)=>{e.stopPropagation();setAddSubTo({subId:sub.id,parentId:task.id});setSubTaskText("");setShowAddTask(false);setAddLinkTo(null);setTagPicker(null);}} style={{
+                    background:isAddingHere ? dColor : dColor+"20",
+                    border:`1.5px solid ${dColor}`,
+                    color:isAddingHere ? "#fff" : dColor,
+                    cursor:"pointer", fontSize:10, fontWeight:700,
+                    borderRadius:4, width:22, height:22,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    flexShrink:0, transition:"all 0.15s",
+                  }} title="Add sub-target">+</button>
+                  <button onClick={()=>removeTask(tk,sub.id,task.id)} style={{background:"transparent",border:"none",color:T.rmBtn,cursor:"pointer",fontSize:14,padding:"0 4px"}}>×</button>
+                </div>
+                {/* Tag picker */}
+                {isPickingTag && (
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"6px 0 6px "+(depth*20+(depth>0?14:0))+"px",paddingLeft:depth*20+(depth>0?14:0),background:T.surface,borderRadius:4,margin:"2px 0"}}>
+                    <button onClick={()=>{setTaskTag(sub.id,task.id,null);setTagPicker(null);}} style={{
+                      background:!task.tagId?"#fff":"transparent",border:`1.5px solid ${T.borderStr}`,
+                      color:T.textMut,padding:"2px 8px",borderRadius:10,fontSize:7,fontFamily:P_ALL.coach.font,cursor:"pointer",
+                    }}>NONE</button>
+                    {(state.tags||[]).map(tag => (
+                      <button key={tag.id} onClick={()=>{setTaskTag(sub.id,task.id,tag.id);setTagPicker(null);}} style={{
+                        background:task.tagId===tag.id?tag.color:tag.color+"20",
+                        border:`1.5px solid ${tag.color}`,
+                        color:task.tagId===tag.id?"#fff":tag.color,
+                        padding:"2px 8px",borderRadius:10,fontSize:7,
+                        fontFamily:P_ALL.coach.font,fontWeight:700,letterSpacing:1,cursor:"pointer",
+                      }}>{tag.name}</button>
+                    ))}
+                    <button onClick={()=>setTagPicker(null)} style={{background:"transparent",border:"none",color:T.textSec,cursor:"pointer",fontSize:12}}>✕</button>
+                  </div>
+                )}
+                {/* Task links */}
+                {hasLinks && (
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,paddingLeft:depth*20+(depth>0?14:0),padding:"4px 0 4px "+(depth*20+(depth>0?14:0))+"px"}}>
+                    {task.links.map(link => (
+                      <div key={link.id} style={{display:"flex",alignItems:"center",gap:0}}>
+                        <a href={link.url} target="_blank" rel="noopener noreferrer" style={{
+                          background:dColor+(themeMode==="light"?"10":"14"),
+                          border:`1.5px solid ${dColor}30`,
+                          color:dColor,padding:"3px 8px",
+                          borderRadius:`${P.btnStyle.borderRadius}px 0 0 ${P.btnStyle.borderRadius}px`,
+                          fontSize:9,textDecoration:"none",fontFamily:P.font,letterSpacing:1,
+                          display:"flex",alignItems:"center",gap:4,
+                        }}>
+                          <span style={{fontSize:8}}>⚡</span> {link.title}
+                        </a>
+                        <button onClick={()=>removeTaskLink(sub.id,task.id,link.id)} style={{
+                          background:dColor+(themeMode==="light"?"10":"14"),
+                          border:`1.5px solid ${dColor}30`,borderLeft:"none",
+                          color:T.rmBtn,cursor:"pointer",fontSize:10,
+                          padding:"3px 5px",
+                          borderRadius:`0 ${P.btnStyle.borderRadius}px ${P.btnStyle.borderRadius}px 0`,
+                        }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Add link input */}
+                {isAddingLink && (
+                  <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",paddingLeft:depth*20+(depth>0?14:0),padding:"6px 0 6px "+(depth*20+(depth>0?14:0))+"px"}}>
+                    <input style={{...inp(tk),width:90,fontSize:10,padding:"5px 8px"}} placeholder="TITLE" value={taskLinkTitle} onChange={e=>setTaskLinkTitle(e.target.value)} autoFocus />
+                    <input style={{...inp(tk),flex:1,minWidth:100,fontSize:10,padding:"5px 8px"}} placeholder="URL" value={taskLinkUrl} onChange={e=>setTaskLinkUrl(e.target.value)}
+                      onKeyDown={e=>{if(e.key==="Enter"&&taskLinkTitle.trim()&&taskLinkUrl.trim()){addTaskLink(sub.id,task.id,taskLinkTitle.trim(),taskLinkUrl.trim());setTaskLinkTitle("");setTaskLinkUrl("");setAddLinkTo(null);}if(e.key==="Escape"){setAddLinkTo(null);}}} />
+                    <button style={{...btn(tk,dColor),padding:"4px 10px",fontSize:9}} onClick={()=>{if(taskLinkTitle.trim()&&taskLinkUrl.trim()){addTaskLink(sub.id,task.id,taskLinkTitle.trim(),taskLinkUrl.trim());setTaskLinkTitle("");setTaskLinkUrl("");setAddLinkTo(null);}}}>🔗 LINK</button>
+                    <button style={{background:"transparent",border:"none",color:T.textSec,cursor:"pointer",fontSize:14,fontWeight:700}} onClick={()=>setAddLinkTo(null)}>✕</button>
+                  </div>
+                )}
+                {/* Sub-task input inline */}
+                {isAddingHere && (
+                  <div style={{display:"flex",gap:6,alignItems:"center",paddingLeft:(depth+1)*20+12,padding:"8px 0 8px "+((depth+1)*20+12)+"px"}}>
+                    <div style={{width:12,height:12,borderLeft:`2px solid ${dColor}40`,borderBottom:`2px solid ${dColor}40`,borderRadius:"0 0 0 4px",flexShrink:0}} />
+                    <input style={{...inp(tk),flex:1,fontSize:11,padding:"6px 10px"}} placeholder={`SUB-TARGET UNDER "${task.text}"...`} value={subTaskText} onChange={e=>setSubTaskText(e.target.value)} autoFocus
+                      onKeyDown={e=>{if(e.key==="Enter"&&subTaskText.trim()){addTask(tk,sub.id,subTaskText.trim(),task.id);setSubTaskText("");setAddSubTo(null);}if(e.key==="Escape"){setAddSubTo(null);setSubTaskText("");}}} />
+                    <button style={{...btn(tk,dColor),padding:"5px 12px",fontSize:10}} onClick={()=>{if(subTaskText.trim()){addTask(tk,sub.id,subTaskText.trim(),task.id);setSubTaskText("");setAddSubTo(null);}}}>DEPLOY</button>
+                    <button style={{background:"transparent",border:"none",color:T.textSec,cursor:"pointer",fontSize:14,fontWeight:700}} onClick={()=>{setAddSubTo(null);setSubTaskText("");}}>✕</button>
+                  </div>
+                )}
+                {hasChildren && task.children.map(child => renderAttackerTask(child, depth + 1))}
+              </div>
+            );
+          };
+
+          return (<div key={sub.id} style={{background:T.cardBg,border:`${P.borderWidth}px solid ${shade}${themeMode==="light"?"20":"25"}`,borderLeft:`${P.borderWidth+2}px solid ${shade}`,borderRadius:P.cardRadius,padding:16,marginBottom:14,boxShadow:T.shadow}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span style={{fontFamily:P.font,...P.titleStyle,fontSize:13,color:shade}}>{sub.name}</span>
+              <span style={{background:shade+(themeMode==="light"?"12":"18"),color:shade,padding:"3px 10px",borderRadius:P.btnStyle.borderRadius,fontSize:10,fontFamily:P.bodyFont,fontWeight:600}}>{taskDone}/{taskTotal}</span>
+            </div>
+            {/* Focus filter pills — attackers only */}
+            {tk === "attackers" && sub.tasks.length > 0 && (
+              <div style={{marginBottom:12,padding:10,background:T.surface,borderRadius:6,border:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontFamily:P.font,...P.labelStyle,fontSize:8,color:T.textMut,letterSpacing:2}}>🎯 FOCUS TARGETS — HOME PRIORITY</span>
+                  {((state.focusedTasks||{})[sub.id]||[]).length > 0 && (
+                    <button onClick={()=>clearFocusedTasks(sub.id)} style={{background:"transparent",border:`1px solid ${T.border}`,color:T.textMut,cursor:"pointer",fontSize:7,padding:"2px 8px",borderRadius:4,fontFamily:P_ALL.coach.font,letterSpacing:1}}>CLEAR ALL</button>
+                  )}
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {sub.tasks.map(task => {
+                    const isFocused = ((state.focusedTasks||{})[sub.id]||[]).includes(task.id);
+                    const tDone = task.done;
+                    const childCount = countAllTasks(task.children || []);
+                    const childDoneCount = countDoneTasks(task.children || []);
+                    return (
+                      <button key={task.id} onClick={()=>toggleFocusedTask(sub.id, task.id)} style={{
+                        display:"flex",alignItems:"center",gap:5,
+                        background: isFocused ? shade : T.cardBg,
+                        border: `2px solid ${isFocused ? shade : T.borderStr}`,
+                        borderRadius:16,padding:"5px 12px 5px 8px",cursor:"pointer",
+                        transition:"all 0.2s",opacity:tDone?0.5:1,
+                      }}>
+                        <div style={{
+                          width:8,height:8,borderRadius:"50%",flexShrink:0,
+                          background:isFocused?"rgba(255,255,255,0.8)":tDone?T.ok:shade,
+                        }} />
+                        <span style={{
+                          fontFamily:P.bodyFont,fontSize:10,fontWeight:600,letterSpacing:0.3,
+                          color:isFocused?"#fff":T.text,maxWidth:120,overflow:"hidden",
+                          textOverflow:"ellipsis",whiteSpace:"nowrap",
+                          textDecoration:tDone?"line-through":"none",
+                        }}>
+                          {task.text}
+                        </span>
+                        {childCount > 0 && (
+                          <span style={{
+                            background:isFocused?"rgba(255,255,255,0.25)":shade+"18",
+                            color:isFocused?"#fff":shade,
+                            padding:"0px 5px",borderRadius:8,fontSize:8,fontWeight:700,
+                            fontFamily:P_ALL.coach.font,
+                          }}>
+                            {childDoneCount}/{childCount}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {((state.focusedTasks||{})[sub.id]||[]).length > 0 && (
+                  <div style={{fontFamily:P_ALL.coach.font,fontSize:7,color:T.textMut,letterSpacing:2,marginTop:6,opacity:0.6}}>
+                    {((state.focusedTasks||{})[sub.id]||[]).length} OF {sub.tasks.length} TARGETS FOCUSED FOR HOME
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Task rendering: recursive for attackers, flat for others */}
+            {tk === "attackers" ? (
+              sub.tasks.map(task => renderAttackerTask(task, 0))
+            ) : (
+              sub.tasks.map(task => (
+              <div key={task.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
+                {task.isSleepTracker?(
+                  <div style={{display:"flex",alignItems:"center",gap:8,flex:1,flexWrap:"wrap"}}>
+                    <span style={{fontFamily:P.bodyFont,...P.taskStyle,opacity:task.done?0.35:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{tk==="defenders"?"🔒":"🌙"} {task.text} {task.sleepHours?`(${task.sleepHours}H)`:""}</span>
+                    {!task.done?(<div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <input type="number" placeholder="HRS" value={sleepHours} onChange={e=>setSleepHours(e.target.value)} style={{...inp(tk),width:55,padding:"5px 8px",textAlign:"center"}} min="0" max="24" step="0.5"/>
+                      <button style={btn(tk,shade)} onClick={()=>{if(sleepHours){completeTask(tk,sub.id,task.id,sleepHours);setSleepHours("");}}}>{tk==="defenders"?"LOCK":"LOG"}</button>
+                    </div>):(<button style={{...btn(tk,"transparent"),opacity:0.4,fontSize:9,color:T.textSec}} onClick={()=>completeTask(tk,sub.id,task.id)}>UNDO</button>)}
+                  </div>
+                ):(
+                  <>
+                    <div onClick={()=>completeTask(tk,sub.id,task.id)} style={{width:22,height:22,borderRadius:P.checkRadius,border:`2px solid ${task.done?shade:T.chkOff}`,background:task.done?shade:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {task.done&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>{tk==="defenders"?"🔒":"✓"}</span>}
+                    </div>
+                    <span style={{fontFamily:P.bodyFont,...P.taskStyle,opacity:task.done?0.3:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{task.text}</span>
+                    {task.recurring&&<span style={{fontFamily:P.bodyFont,...P.labelStyle,fontSize:8,color:T.textMut}}>{tk==="attackers"?"REPEAT":"DAILY"}</span>}
+                    <button onClick={()=>removeTask(tk,sub.id,task.id)} style={{background:"transparent",border:"none",color:T.rmBtn,cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
+                  </>
+                )}
+              </div>
+              ))
+            )}
+            {showAddTask===sub.id?(
+              <div style={{marginTop:10,display:"flex",gap:8,alignItems:"center"}}>
+                <input style={{...inp(tk),flex:1}} placeholder={tk==="defenders"?"NEW PROTOCOL...":tk==="attackers"?"NEW TARGET...":"New task..."} value={newTaskText} onChange={e=>setNewTaskText(e.target.value)} autoFocus onKeyDown={e=>{if(e.key==="Enter"&&newTaskText.trim()){addTask(tk,sub.id,newTaskText.trim());setNewTaskText("");setShowAddTask(false);}}}/>
+                <button style={btn(tk,shade)} onClick={()=>{if(newTaskText.trim()){addTask(tk,sub.id,newTaskText.trim());setNewTaskText("");setShowAddTask(false);}}}>
+                  {tk==="defenders"?"SECURE":tk==="attackers"?"DEPLOY":"ADD"}</button>
+                <button style={{...btn(tk,"transparent"),color:T.textSec}} onClick={()=>{setShowAddTask(false);setNewTaskText("");}}>✕</button>
+              </div>
+            ):(
+              <button style={{background:"transparent",border:`1px dashed ${shade}${themeMode==="light"?"35":"25"}`,color:shade,padding:8,cursor:"pointer",width:"100%",marginTop:10,fontFamily:P.font,...P.btnStyle}} onClick={()=>{setShowAddTask(sub.id);setNewTaskText("");}}>
+                + {tk==="defenders"?"ADD PROTOCOL":tk==="attackers"?"ADD TARGET":"ADD TASK"}</button>
+            )}
+            {tk==="attackers"&&(<div style={{marginTop:12}}>
+              <div style={{fontFamily:P.font,...P.labelStyle,color:T.textMut,marginBottom:8}}>QUICK LINKS</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {(sub.links||[]).map((link,li)=>(<a key={li} href={link.url} target="_blank" rel="noopener noreferrer" style={{background:shade+(themeMode==="light"?"10":"12"),border:`2px solid ${shade}${themeMode==="light"?"20":"25"}`,color:shade,padding:"5px 12px",borderRadius:P.btnStyle.borderRadius,fontSize:10,textDecoration:"none",fontFamily:P.font,letterSpacing:2}}>⚡ {link.title}</a>))}
+              </div>
+              {showAddLink===sub.id?(
+                <div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
+                  <input style={{...inp(tk),flex:1,minWidth:80}} placeholder="TITLE" value={newLinkTitle} onChange={e=>setNewLinkTitle(e.target.value)} autoFocus/>
+                  <input style={{...inp(tk),flex:2,minWidth:120}} placeholder="URL" value={newLinkUrl} onChange={e=>setNewLinkUrl(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newLinkTitle.trim()&&newLinkUrl.trim()){addLink(sub.id,newLinkTitle.trim(),newLinkUrl.trim());setNewLinkTitle("");setNewLinkUrl("");setShowAddLink(false);}}}/>
+                  <button style={btn(tk,shade)} onClick={()=>{if(newLinkTitle.trim()&&newLinkUrl.trim()){addLink(sub.id,newLinkTitle.trim(),newLinkUrl.trim());setNewLinkTitle("");setNewLinkUrl("");setShowAddLink(false);}}}>DEPLOY</button>
+                  <button style={{...btn(tk,"transparent"),color:T.textSec}} onClick={()=>setShowAddLink(false)}>✕</button>
+                </div>
+              ):(<button style={{background:"transparent",border:"none",color:shade,cursor:"pointer",fontSize:10,fontFamily:P.font,marginTop:6,opacity:0.5,letterSpacing:2,padding:0}} onClick={()=>{setShowAddLink(sub.id);setNewLinkTitle("");setNewLinkUrl("");}}>+ ADD LINK</button>)}
+            </div>)}
+          </div>);
+        })}
+      </div>
+    );
+  };
+
+  /* ─── COACH ─── */
+  const renderCoach = () => {
+    const P=P_ALL.coach;const C=TC("coach");
+    return (
+      <div style={{padding:16,maxWidth:620,margin:"0 auto",fontFamily:P.font}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:P.cardRadius,padding:20,marginBottom:20,boxShadow:T.shadow}}>
+          <div style={{...P.labelStyle,color:T.textMut,marginBottom:6}}>CONTROL CENTER</div>
+          <div style={{...P.titleStyle,fontSize:24,color:C.base}}>📋 COACH DASHBOARD</div>
+          <div style={{fontFamily:P.bodyFont,fontSize:12,color:T.textMut,letterSpacing:2,marginTop:4}}>{P.tagline}</div>
+        </div>
+
+        {/* Football Field */}
+        {renderField()}
+
+        {/* Theme Selector */}
+        <div style={{background:T.cardBg,borderRadius:P.cardRadius,padding:16,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+          <div style={{...P.labelStyle,color:T.textMut,marginBottom:14}}>🎨 THEME SELECTOR</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            <button onClick={()=>setState(p=>({...p,themeId:"auto"}))} style={{
+              background:state.themeId==="auto"?TC("coach").base:T.surface,
+              border:`${state.themeId==="auto"?2:1}px solid ${state.themeId==="auto"?TC("coach").base:T.borderStr}`,
+              color:state.themeId==="auto"?"#fff":T.text,padding:"10px 14px",borderRadius:6,cursor:"pointer",textAlign:"left",
+            }}>
+              <div style={{fontSize:14,marginBottom:2}}>🔄</div>
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:1}}>AUTO</div>
+              <div style={{fontSize:8,opacity:0.6,letterSpacing:1}}>Day/Night</div>
+            </button>
+            {THEME_LIST.map(t => (
+              <button key={t.id} onClick={()=>setState(p=>({...p,themeId:t.id}))} style={{
+                background:state.themeId===t.id?TC("coach").base:T.surface,
+                border:`${state.themeId===t.id?2:1}px solid ${state.themeId===t.id?TC("coach").base:T.borderStr}`,
+                color:state.themeId===t.id?"#fff":T.text,padding:"10px 14px",borderRadius:6,cursor:"pointer",textAlign:"left",
+              }}>
+                <div style={{fontSize:14,marginBottom:2}}>{t.icon}</div>
+                <div style={{fontSize:11,fontWeight:700,letterSpacing:1}}>{t.name.toUpperCase()}</div>
+                <div style={{fontSize:8,opacity:0.6,letterSpacing:1}}>{t.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Font Selector */}
+        <div style={{background:T.cardBg,borderRadius:P.cardRadius,padding:16,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+          <div style={{...P.labelStyle,color:T.textMut,marginBottom:14}}>🔤 TEAM IDENTITY — FONT CONTROL</div>
+          {["attackers","midPlayers","defenders","coach"].map(tk => {
+            const opts=FONT_OPTIONS[tk];const currentId=state.fonts[tk];const teamC=TC(tk);
+            return (<div key={tk} style={{marginBottom:16}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <span style={{fontSize:16}}>{getTeamIcon(tk)}</span>
+                <span style={{fontFamily:P_ALL[tk].font,color:teamC.base,fontSize:12,fontWeight:700,letterSpacing:2}}>{P_ALL[tk].nameDisplay}</span>
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {opts.map(opt => (<button key={opt.id} onClick={()=>setState(p=>({...p,fonts:{...p.fonts,[tk]:opt.id}}))} style={{
+                  background:currentId===opt.id?teamC.base:T.surface,border:`${currentId===opt.id?2:1}px solid ${currentId===opt.id?teamC.base:T.borderStr}`,
+                  color:currentId===opt.id?"#fff":T.text,padding:"8px 14px",borderRadius:6,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:2,
+                }}>
+                  <span style={{fontFamily:opt.family,fontSize:13,fontWeight:700,letterSpacing:1}}>{opt.name}</span>
+                  <span style={{fontSize:9,opacity:currentId===opt.id?0.8:0.45,letterSpacing:1,fontFamily:P.font}}>{opt.vibe}</span>
+                </button>))}
+              </div>
+              <div style={{marginTop:8,background:T.surface,borderRadius:4,padding:"8px 12px",border:`1px solid ${T.border}`}}>
+                <span style={{fontFamily:getFont(tk,currentId),fontSize:14,color:teamC.base,letterSpacing:2}}>
+                  {P_ALL[tk].tagline}
+                </span>
+              </div>
+            </div>);
+          })}
+        </div>
+
+        {/* Settings sections */}
+        {[{label:"WEEKDAY MINIMUMS",key:"weekdayMinimums",note:"FLUID"},{label:"WEEKEND MINIMUMS",key:"weekendMinimums",note:"⚠️ STRICT"}].map(sec=>(
+          <div key={sec.key} style={{background:T.cardBg,borderRadius:P.cardRadius,padding:14,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+            <div style={{...P.labelStyle,color:T.textMut,marginBottom:12}}>{sec.label} — {sec.note}</div>
+            {["attackers","midPlayers","defenders"].map(tk=>(<div key={tk} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
+              <span style={{color:TC(tk).base,fontSize:12,fontFamily:P_ALL[tk].font}}>{getTeamIcon(tk)} {P_ALL[tk].nameDisplay}</span>
+              <input type="number" value={state.coach[sec.key][tk]} onChange={e=>updateCoach(`${sec.key}.${tk}`,e.target.value)} style={{...inp("coach"),width:50,textAlign:"center",padding:"4px"}} min="0"/>
+            </div>))}
+          </div>
+        ))}
+        <div style={{background:T.cardBg,borderRadius:P.cardRadius,padding:14,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+          <div style={{...P.labelStyle,color:T.textMut,marginBottom:12}}>PUNISHMENT PARAMETERS</div>
+          {[{label:"PUNISHMENT DURATION (HRS)",key:"punishmentDuration"},{label:"COOLDOWN PERIOD (HRS)",key:"cooldownHours"},{label:"OVERRIDE PENALTY (PTS)",key:"overridePenalty"},{label:"IGNORED DAYS TRIGGER",key:"ignoredDaysTrigger"},{label:"DAILY IGNORE PENALTY",key:"dailyIgnorePenalty"}].map(item=>(
+            <div key={item.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
+              <span style={{fontSize:11,color:T.textSec}}>{item.label}</span>
+              <input type="number" value={state.coach[item.key]} onChange={e=>updateCoach(item.key,e.target.value)} style={{...inp("coach"),width:55,textAlign:"center",padding:"4px"}} min="0"/>
+            </div>
+          ))}
+        </div>
+        <div style={{background:T.cardBg,borderRadius:P.cardRadius,padding:14,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+          <div style={{...P.labelStyle,color:T.textMut,marginBottom:12}}>CREDIT STATUS</div>
+          {["attackers","midPlayers","defenders"].map(tk=>{const pct=Math.min(100,(state.credits[tk]/150)*100);return(
+            <div key={tk} style={{marginBottom:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                <span style={{color:TC(tk).base,fontSize:12,fontFamily:P_ALL[tk].font}}>{getTeamIcon(tk)} {P_ALL[tk].nameDisplay}</span>
+                <span style={{fontSize:13,fontWeight:700,color:TC(tk).base}}>{state.credits[tk]}</span>
+              </div>
+              <div style={{background:T.barBg,borderRadius:3,height:6,overflow:"hidden"}}>
+                <div style={{background:TC(tk).base,height:"100%",width:`${pct}%`,borderRadius:3,transition:"width 0.5s"}}/>
+              </div>
+            </div>);})}
+          <div style={{fontSize:9,color:T.textMut,marginTop:8,letterSpacing:1}}>MONTHLY RESET: 1ST — BELOW 100 → RESET | ABOVE 100 → KEPT</div>
+        </div>
+
+        {/* TAG MANAGEMENT */}
+        <div style={{background:T.cardBg,borderRadius:P.cardRadius,padding:14,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+          <div style={{...P.labelStyle,color:T.textMut,marginBottom:12}}>🏷️ AUTO-TAG RULES [{(state.tags||[]).length}]</div>
+          <div style={{fontSize:9,color:T.textSec,marginBottom:12,letterSpacing:0.5}}>TAGS AUTO-ASSIGN WHEN TASK TEXT MATCHES KEYWORDS. CLICK A TAG TO EDIT.</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {(state.tags||[]).map(tag => {
+              const isEditing = editingTag === tag.id;
+              return (
+                <div key={tag.id} style={{background:T.surface,borderRadius:6,border:`1px solid ${tag.color}25`,borderLeft:`3px solid ${tag.color}`,padding:isEditing?"10px":"8px 10px"}}>
+                  {isEditing ? (
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                        <input style={{...inp("coach"),flex:1,fontSize:10,padding:"4px 8px"}} value={tag.name} onChange={e=>updateTag(tag.id,"name",e.target.value)} />
+                        <input type="color" value={tag.color} onChange={e=>updateTag(tag.id,"color",e.target.value)} style={{width:28,height:28,border:"none",padding:0,cursor:"pointer",borderRadius:4}} />
+                      </div>
+                      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                        <input style={{...inp("coach"),flex:1,fontSize:9,padding:"4px 8px"}} value={(tag.keywords||[]).join(", ")} onChange={e=>updateTag(tag.id,"keywords",e.target.value)} placeholder="keyword1, keyword2, ..." />
+                      </div>
+                      <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+                        <button onClick={()=>removeTag(tag.id)} style={{background:"transparent",border:`1px solid ${T.lockBrd}`,color:T.lockBrd,padding:"3px 10px",borderRadius:4,fontSize:8,cursor:"pointer",fontFamily:P.font}}>DELETE</button>
+                        <button onClick={()=>setEditingTag(null)} style={{...btn("coach",TC("coach").base),padding:"3px 12px",fontSize:8}}>DONE</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div onClick={()=>setEditingTag(tag.id)} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+                      <span style={{
+                        background:tag.color+"20",border:`1.5px solid ${tag.color}60`,
+                        color:tag.color,padding:"2px 8px",borderRadius:10,
+                        fontSize:8,fontFamily:P.font,fontWeight:700,letterSpacing:1,flexShrink:0,
+                      }}>{tag.name}</span>
+                      <span style={{fontSize:8,color:T.textMut,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:P.bodyFont}}>
+                        {(tag.keywords||[]).join(", ")}
+                      </span>
+                      <span style={{fontSize:8,color:T.textMut,opacity:0.4}}>✏️</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* Add new tag */}
+          <div style={{marginTop:10,padding:10,background:T.surface,borderRadius:6,border:`1px dashed ${T.borderStr}`}}>
+            <div style={{fontSize:8,color:T.textMut,letterSpacing:2,marginBottom:6,fontFamily:P.font}}>+ NEW TAG</div>
+            <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+              <input style={{...inp("coach"),width:80,fontSize:10,padding:"4px 8px"}} placeholder="NAME" value={newTagName} onChange={e=>setNewTagName(e.target.value)} />
+              <input type="color" value={newTagColor} onChange={e=>setNewTagColor(e.target.value)} style={{width:28,height:28,border:"none",padding:0,cursor:"pointer",borderRadius:4}} />
+              <input style={{...inp("coach"),flex:1,minWidth:100,fontSize:9,padding:"4px 8px"}} placeholder="keyword1, keyword2, ..." value={newTagKeywords} onChange={e=>setNewTagKeywords(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"&&newTagName.trim()){addTag(newTagName.trim(),newTagColor,newTagKeywords);setNewTagName("");setNewTagKeywords("");}}} />
+              <button style={{...btn("coach",TC("coach").base),padding:"4px 12px",fontSize:9}} onClick={()=>{if(newTagName.trim()){addTag(newTagName.trim(),newTagColor,newTagKeywords);setNewTagName("");setNewTagKeywords("");}}}>ADD</button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{background:T.cardBg,borderRadius:P.cardRadius,padding:14,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
+          <div style={{...P.labelStyle,color:T.textMut,marginBottom:12}}>SESSION LOGS [{state.coachSessions.length}]</div>
+          {state.coachSessions.length===0?(<div style={{fontSize:11,color:T.textMut,textAlign:"center",padding:20}}>NO SESSIONS. SQUAD IS BEHAVING.</div>):(
+            state.coachSessions.slice(-5).reverse().map(sess=>(<div key={sess.id} style={{background:T.surface,borderRadius:6,padding:12,marginBottom:8,borderLeft:`3px solid ${T.sessBrd}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:10,color:T.lockBrd}}>TRIGGER: {getTeamLabel(sess.triggeredBy)}</span>
+                <span style={{fontSize:10,color:T.textMut}}>{new Date(sess.date).toLocaleDateString()}</span>
+              </div>
+              {Object.entries(sess.answers).map(([qi,ans])=>(<div key={qi} style={{marginBottom:6}}>
+                <div style={{fontSize:9,color:T.textMut,marginBottom:2}}>Q{parseInt(qi)+1}: {COACH_QUESTIONS[parseInt(qi)]}</div>
+                <div style={{fontSize:11,color:T.textSec,paddingLeft:8}}>→ {ans}</div>
+              </div>))}
+            </div>))
+          )}
+        </div>
+        <button style={{...btn("coach",TC("coach").base),width:"100%",padding:14}} onClick={()=>setShowCoachSession(true)}>📋 START MANUAL SESSION</button>
+      </div>
+    );
+  };
+
+  const renderModal = () => (
+    <div style={{position:"fixed",inset:0,background:T.modalOv,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:T.modalBg,border:`2px solid ${TC("coach").base}`,borderRadius:8,padding:24,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto",fontFamily:P_ALL.coach.font,color:T.text,boxShadow:T.shadowStr||T.shadow}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:32,marginBottom:8}}>📋</div>
+          <div style={{fontSize:18,fontWeight:700,color:TC("coach").base,letterSpacing:4}}>COACH SESSION</div>
+          <div style={{fontSize:12,color:T.textMut,marginTop:6,letterSpacing:2}}>ALL RESPONSES RECORDED FOR ANALYSIS.</div>
+        </div>
+        {COACH_QUESTIONS.map((q,i)=>(<div key={i} style={{marginBottom:18}}>
+          <div style={{fontSize:12,color:TC("coach").base,marginBottom:6,fontWeight:700,letterSpacing:1}}>Q{i+1}: {q}</div>
+          <textarea style={{...inp("coach"),minHeight:60,resize:"vertical"}} placeholder="YOUR ANSWER..." value={sessionAnswers[i]||""} onChange={e=>setSessionAnswers(p=>({...p,[i]:e.target.value}))}/>
+        </div>))}
+        <div style={{display:"flex",gap:10,marginTop:20}}>
+          <button style={{...btn("coach",T.surface),flex:1,padding:12,color:T.textSec}} onClick={()=>{setShowCoachSession(false);setSessionAnswers({});}}>CANCEL</button>
+          <button style={{...btn("coach",TC("coach").base),flex:1,padding:12,opacity:Object.keys(sessionAnswers).length<COACH_QUESTIONS.length?0.4:1}} onClick={submitCoachSession} disabled={Object.keys(sessionAnswers).length<COACH_QUESTIONS.length}>SUBMIT</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{background:T.bg,color:T.text,minHeight:"100vh",transition:"background 0.4s,color 0.4s"}}>
+      <style>{FONTS_CSS}{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}textarea{font-family:inherit}input[type=number]::-webkit-inner-spin-button{opacity:0.3}a:hover{opacity:0.8}`}</style>
+      <div style={{background:T.topBar,borderBottom:`1px solid ${T.border}`,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,backdropFilter:"blur(20px)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>{setView("dashboard");setSelectedTeam(null);}}>
+          <span style={{fontSize:20}}>⚽</span>
+          <span style={{fontFamily:P_ALL.coach.font,fontSize:14,fontWeight:700,letterSpacing:3,color:T.text}}>SQUAD</span>
+        </div>
+        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          <button onClick={()=>{setView("dashboard");setSelectedTeam(null);}} style={{background:view==="dashboard"?T.navAct:"transparent",border:`1px solid ${view==="dashboard"?T.borderStr:"transparent"}`,color:view==="dashboard"?T.navActTxt:T.navTxt,padding:"5px 10px",borderRadius:6,cursor:"pointer",fontFamily:P_ALL.coach.font,fontSize:10,letterSpacing:2}}>HOME</button>
+          {view==="dashboard" && (
+            <button onClick={()=>{setHomeMode(homeMode==="chat"?"dashboard":"chat");setChatMessages([]);setChatStep(null);}} style={{
+              background:homeMode==="chat"?TC("coach").base+"20":"transparent",
+              border:`1px solid ${homeMode==="chat"?TC("coach").base+"50":"transparent"}`,
+              color:homeMode==="chat"?TC("coach").base:T.navTxt,
+              padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:12,
+            }} title={homeMode==="chat"?"Switch to Dashboard":"Switch to Chat"}>{homeMode==="chat"?"💬":"📊"}</button>
+          )}
+          {["attackers","midPlayers","defenders"].map(tk=>(<button key={tk} onClick={()=>{setView("team");setSelectedTeam(tk);}} style={{background:(view==="team"&&selectedTeam===tk)?TC(tk).lighter:"transparent",border:`1px solid ${(view==="team"&&selectedTeam===tk)?TC(tk).border:"transparent"}`,color:(view==="team"&&selectedTeam===tk)?TC(tk).base:T.navTxt,padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:14}}>{getTeamIcon(tk)}</button>))}
+          <button onClick={()=>setView("coach")} style={{background:view==="coach"?TC("coach").lighter:"transparent",border:`1px solid ${view==="coach"?TC("coach").border:"transparent"}`,color:view==="coach"?TC("coach").base:T.navTxt,padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:14}}>📋</button>
+        </div>
+      </div>
+      {view==="dashboard"&&(homeMode==="chat"?renderChat():renderDash())}
+      {view==="team"&&renderTeam()}
+      {view==="coach"&&renderCoach()}
+      {showCoachSession&&renderModal()}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(TeamTaskManager));
+  </script>
+</body>
+</html>
