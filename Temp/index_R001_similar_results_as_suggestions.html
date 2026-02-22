@@ -1881,127 +1881,78 @@ function TeamTaskManager() {
                   )}
 
                   {/* Search results — links mode */}
-                  {d.type === "search_links" && d.results && (() => {
-                    const primary = d.results[0];
-                    const suggestions = d.results.slice(1);
-                    const C0 = TC(primary.tk);
-                    const shade0 = C0.shades ? C0.shades[primary.sub.color % C0.shades.length] : C0.base;
-                    const taskLinks0 = primary.task.links || [];
-                    const childLinks0 = [];
-                    const collectLinks0 = (tasks) => tasks.forEach(t => { (t.links||[]).forEach(l => childLinks0.push({...l, from: t.text})); if (t.children) collectLinks0(t.children); });
-                    if (primary.task.children) collectLinks0(primary.task.children);
-                    const allLinks0 = [...taskLinks0.map(l => ({...l, from: primary.task.text})), ...childLinks0];
-                    return (
-                      <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
-                        {/* Primary result */}
-                        <div style={{background:shade0+"10",border:`1.5px solid ${shade0}30`,borderLeft:`3px solid ${shade0}`,borderRadius:8,padding:12}}>
-                          <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:8}}>{primary.task.text}</div>
-                          {allLinks0.length > 0 ? (
-                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                              {allLinks0.map((link, li) => (
-                                <a key={li} href={link.url} target="_blank" rel="noopener noreferrer" style={{
-                                  background:shade0+"15",border:`1px solid ${shade0}35`,
-                                  color:shade0,padding:"5px 12px",borderRadius:12,
-                                  fontSize:10,textDecoration:"none",fontFamily:P_ALL.coach.font,
-                                  display:"flex",alignItems:"center",gap:4,
-                                }}>
-                                  <span style={{fontSize:9}}>⚡</span> {link.title}
-                                  {link.from !== primary.task.text && <span style={{fontSize:8,opacity:0.6}}>({link.from})</span>}
-                                </a>
-                              ))}
-                            </div>
-                          ) : (
-                            <div style={{fontSize:9,color:T.textMut,opacity:0.5,fontStyle:"italic"}}>No links attached</div>
-                          )}
-                        </div>
-                        {/* Similar suggestions */}
-                        {suggestions.length > 0 && (
-                          <div>
-                            <div style={{fontSize:7,letterSpacing:2,color:T.textMut,fontFamily:P_ALL.coach.font,marginBottom:4,opacity:0.6}}>SIMILAR</div>
-                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                              {suggestions.map((r, i) => {
-                                const Cs = TC(r.tk);
-                                const shadeS = Cs.shades ? Cs.shades[r.sub.color % Cs.shades.length] : Cs.base;
-                                const hasLinks = (r.task.links||[]).length > 0 || (r.task.children||[]).some(c => (c.links||[]).length > 0);
-                                return (
-                                  <div key={i} style={{
-                                    background:shadeS+"08",border:`1px solid ${shadeS}20`,
-                                    borderRadius:6,padding:"5px 10px",
-                                    display:"flex",alignItems:"center",gap:5,
+                  {d.type === "search_links" && d.results && (
+                    <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
+                      {d.results.map((r, i) => {
+                        const C = TC(r.tk);
+                        const shade = C.shades ? C.shades[r.sub.color % C.shades.length] : C.base;
+                        const taskLinks = r.task.links || [];
+                        const childLinks = [];
+                        const collectLinks = (tasks) => tasks.forEach(t => { (t.links||[]).forEach(l => childLinks.push({...l, from: t.text})); if (t.children) collectLinks(t.children); });
+                        if (r.task.children) collectLinks(r.task.children);
+                        const allLinks = [...taskLinks.map(l => ({...l, from: r.task.text})), ...childLinks];
+                        return (
+                          <div key={i} style={{background:shade+"08",border:`1.5px solid ${shade}25`,borderLeft:`3px solid ${shade}`,borderRadius:8,padding:10}}>
+                            <div style={{fontSize:11,fontWeight:700,color:T.text,marginBottom:6}}>{r.task.text}</div>
+                            {allLinks.length > 0 ? (
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                                {allLinks.map((link, li) => (
+                                  <a key={li} href={link.url} target="_blank" rel="noopener noreferrer" style={{
+                                    background:shade+"12",border:`1px solid ${shade}30`,
+                                    color:shade,padding:"4px 10px",borderRadius:12,
+                                    fontSize:9,textDecoration:"none",fontFamily:P_ALL.coach.font,
+                                    display:"flex",alignItems:"center",gap:4,
                                   }}>
-                                    <span style={{fontSize:9,color:T.text,opacity:0.7}}>{r.task.text}</span>
-                                    {hasLinks && <span style={{fontSize:7,color:shadeS,opacity:0.5}}>🔗</span>}
-                                    {!hasLinks && <span style={{fontSize:7,color:T.textMut,opacity:0.3}}>—</span>}
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                    <span style={{fontSize:8}}>⚡</span> {link.title}
+                                    {link.from !== r.task.text && <span style={{fontSize:7,opacity:0.6}}>({link.from})</span>}
+                                  </a>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{fontSize:9,color:T.textMut,opacity:0.5,fontStyle:"italic"}}>No links attached</div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Search results — status mode */}
-                  {d.type === "search_status" && d.results && (() => {
-                    const primary = d.results[0];
-                    const suggestions = d.results.slice(1);
-                    const C0 = TC(primary.tk);
-                    const shade0 = C0.shades ? C0.shades[primary.sub.color % C0.shades.length] : C0.base;
-                    const pct0 = primary.childCount > 0 ? Math.round(primary.childDone / primary.childCount * 100) : (primary.task.done ? 100 : 0);
-                    return (
-                      <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
-                        {/* Primary result */}
-                        <div style={{background:shade0+"10",border:`1.5px solid ${shade0}30`,borderLeft:`3px solid ${shade0}`,borderRadius:8,padding:12}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <div style={{position:"relative",width:30,height:30,flexShrink:0}}>
-                              <svg width="30" height="30" viewBox="0 0 30 30">
-                                <circle cx="15" cy="15" r="12" fill="none" stroke={shade0+"20"} strokeWidth="2.5" />
-                                <circle cx="15" cy="15" r="12" fill="none" stroke={pct0===100?"#22c55e":shade0} strokeWidth="2.5"
-                                  strokeDasharray={75.4} strokeDashoffset={75.4*(1-pct0/100)}
-                                  strokeLinecap="round" transform="rotate(-90 15 15)" />
-                              </svg>
-                              <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:pct0===100?"#22c55e":shade0}}>{pct0}%</div>
+                  {d.type === "search_status" && d.results && (
+                    <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
+                      {d.results.map((r, i) => {
+                        const C = TC(r.tk);
+                        const shade = C.shades ? C.shades[r.sub.color % C.shades.length] : C.base;
+                        const pct = r.childCount > 0 ? Math.round(r.childDone / r.childCount * 100) : (r.task.done ? 100 : 0);
+                        return (
+                          <div key={i} style={{background:shade+"08",border:`1.5px solid ${shade}25`,borderLeft:`3px solid ${shade}`,borderRadius:8,padding:10}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <div style={{position:"relative",width:30,height:30,flexShrink:0}}>
+                                <svg width="30" height="30" viewBox="0 0 30 30">
+                                  <circle cx="15" cy="15" r="12" fill="none" stroke={shade+"20"} strokeWidth="2.5" />
+                                  <circle cx="15" cy="15" r="12" fill="none" stroke={pct===100?"#22c55e":shade} strokeWidth="2.5"
+                                    strokeDasharray={75.4} strokeDashoffset={75.4*(1-pct/100)}
+                                    strokeLinecap="round" transform="rotate(-90 15 15)" />
+                                </svg>
+                                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:pct===100?"#22c55e":shade}}>{pct}%</div>
+                              </div>
+                              <div style={{flex:1}}>
+                                <div style={{fontSize:11,fontWeight:700,color:T.text}}>{r.task.text}</div>
+                              </div>
+                              <span style={{fontSize:9,fontWeight:700,color:pct===100?"#22c55e":r.task.done?"#22c55e":shade,fontFamily:P_ALL.coach.font}}>
+                                {r.task.done ? "✅ DONE" : r.childCount > 0 ? `${r.childDone}/${r.childCount}` : "⏳ PENDING"}
+                              </span>
                             </div>
-                            <div style={{flex:1}}>
-                              <div style={{fontSize:12,fontWeight:700,color:T.text}}>{primary.task.text}</div>
-                            </div>
-                            <span style={{fontSize:9,fontWeight:700,color:pct0===100?"#22c55e":primary.task.done?"#22c55e":shade0,fontFamily:P_ALL.coach.font}}>
-                              {primary.task.done ? "✅ DONE" : primary.childCount > 0 ? `${primary.childDone}/${primary.childCount}` : "⏳ PENDING"}
-                            </span>
+                            {r.childCount > 0 && (
+                              <div style={{background:shade+"10",borderRadius:4,height:4,overflow:"hidden",marginTop:6}}>
+                                <div style={{height:"100%",background:pct===100?"#22c55e":shade,width:`${pct}%`,borderRadius:4,transition:"width 0.3s"}} />
+                              </div>
+                            )}
                           </div>
-                          {primary.childCount > 0 && (
-                            <div style={{background:shade0+"10",borderRadius:4,height:4,overflow:"hidden",marginTop:6}}>
-                              <div style={{height:"100%",background:pct0===100?"#22c55e":shade0,width:`${pct0}%`,borderRadius:4,transition:"width 0.3s"}} />
-                            </div>
-                          )}
-                        </div>
-                        {/* Similar suggestions */}
-                        {suggestions.length > 0 && (
-                          <div>
-                            <div style={{fontSize:7,letterSpacing:2,color:T.textMut,fontFamily:P_ALL.coach.font,marginBottom:4,opacity:0.6}}>SIMILAR</div>
-                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                              {suggestions.map((r, i) => {
-                                const Cs = TC(r.tk);
-                                const shadeS = Cs.shades ? Cs.shades[r.sub.color % Cs.shades.length] : Cs.base;
-                                const pctS = r.childCount > 0 ? Math.round(r.childDone / r.childCount * 100) : (r.task.done ? 100 : 0);
-                                return (
-                                  <div key={i} style={{
-                                    background:shadeS+"08",border:`1px solid ${shadeS}20`,
-                                    borderRadius:6,padding:"5px 10px",
-                                    display:"flex",alignItems:"center",gap:5,
-                                  }}>
-                                    <span style={{fontSize:9,color:T.text,opacity:0.7}}>{r.task.text}</span>
-                                    <span style={{fontSize:7,color:pctS===100?"#22c55e":shadeS,fontFamily:P_ALL.coach.font}}>{r.task.done?"✅":pctS+"%"}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             );
