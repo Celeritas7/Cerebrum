@@ -1,68 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>SQUAD Task Manager</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body, #root { height: 100%; width: 100%; overflow: hidden; }
-  body { font-family: sans-serif; -webkit-font-smoothing: antialiased; }
-  @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SQUAD — Task Manager</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-<div id="root"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-<script type="text/babel" data-type="module">
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
 const { useState, useEffect, useCallback, useRef } = React;
 
 const APP_KEY = "team-task-manager-v6";
-const SUPA_URL = "https://wylxvmkcrexwfpjpbhyy.supabase.co/rest/v1";
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak";
-const SUPA_HEADERS = { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" };
-async function supaGet(path) { const r = await fetch(`${SUPA_URL}/${path}`, { headers: SUPA_HEADERS }); return r.ok ? r.json() : []; }
-async function supaPatch(path, body) { return fetch(`${SUPA_URL}/${path}`, { method: "PATCH", headers: {...SUPA_HEADERS, Prefer: "return=representation"}, body: JSON.stringify(body) }); }
-async function supaPost(path, body) { return fetch(`${SUPA_URL}/${path}`, { method: "POST", headers: {...SUPA_HEADERS, Prefer: "return=minimal"}, body: JSON.stringify(body) }); }
-async function supaDelete(path) { return fetch(`${SUPA_URL}/${path}`, { method: "DELETE", headers: {...SUPA_HEADERS, Prefer: "return=minimal"} }); }
-
-// Build app state from Supabase relational tables (first-time bootstrap)
-async function buildStateFromDB() {
-  const cfgRows = await supaGet("mind_map_app_chat_memory?key=eq.squad_config&select=value");
-  if (!cfgRows.length) return null;
-  const cfg = JSON.parse(cfgRows[0].value);
-  const projIds = Object.values(cfg.projectMap);
-  const assemblies = await supaGet(`mind_map_app_assemblies?project_id=in.(${projIds.join(",")})`);
-  const asmIds = assemblies.map(a => a.id);
-  if (!asmIds.length) return null;
-  const tasks = await supaGet(`mind_map_app_tasks?assembly_id=in.(${asmIds.join(",")})&select=*`);
-  function buildTree(flat, pid) {
-    return flat.filter(t => t.parent_id === pid).map(t => ({
-      id: t.id, text: t.name, done: t.status === "done", recurring: t.is_recurring || false,
-      children: buildTree(flat, t.id), links: [],
-      ...(t.notes === "sleep_tracker" ? { isSleepTracker: true } : {}),
-    }));
-  }
-  const teamOf = {}; projIds.forEach((pid, i) => teamOf[pid] = ["attackers","midPlayers","defenders"][i]);
-  const subs = { attackers: [], midPlayers: [], defenders: [] };
-  const asmEntries = Object.entries(cfg.assemblyMap);
-  for (const a of assemblies) {
-    const tk = teamOf[a.project_id]; if (!tk) continue;
-    const entry = asmEntries.find(([,v]) => v === a.id);
-    const flat = tasks.filter(t => t.assembly_id === a.id);
-    subs[tk].push({ id: entry ? entry[0] : a.id, name: a.name, color: subs[tk].length, tasks: buildTree(flat, null), links: [] });
-  }
-  return { ...DEFAULT_STATE, subteams: subs, credits: cfg.credits || DEFAULT_STATE.credits, coach: cfg.coach || DEFAULT_STATE.coach };
-}
 
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
-function generateUUID() { try { return crypto.randomUUID(); } catch { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);}); } }
 function isWeekend() { const d = new Date().getDay(); return d === 0 || d === 6; }
 function getTodayKey() { return new Date().toISOString().split("T")[0]; }
 function getTeamLabel(k) { return k === "attackers" ? "ATTACKERS" : k === "midPlayers" ? "Mid Players" : k === "defenders" ? "Defenders" : "COACH"; }
@@ -222,11 +176,11 @@ function resetTreeRecurring(tasks) {
   }));
 }
 // Ensure all attacker tasks have children array (migration helper)
-function migrateTasks(tasks) {
+function migrateAttackerTasks(tasks) {
   if (!tasks) return [];
   return tasks.map(t => ({
     ...t,
-    children: Array.isArray(t.children) ? migrateTasks(t.children) : [],
+    children: Array.isArray(t.children) ? migrateAttackerTasks(t.children) : [],
     links: Array.isArray(t.links) ? t.links : [],
   }));
 }
@@ -248,148 +202,123 @@ function removeLinkInTree(tasks, tid, linkId) {
   });
 }
 
-// ─── TF-IDF CLASSIFIER + CLAUDE API FALLBACK ───
+// ─── NAIVE BAYES CLASSIFIER FOR TASK ROUTING ───
 function tokenize(text) {
   return (text || "").toLowerCase().replace(/[^a-z0-9\u3000-\u9fff\u1000-\u109f]/g, " ").split(/\s+/).filter(w => w.length > 1);
 }
 
-function buildTFIDF(subteams, tags) {
-  const docs = []; // [{cat, tokens}]
-  const df = {};   // word → number of docs containing it
+function buildNBClassifier(subteams, tags) {
+  // Categories: "teamKey::subId" e.g. "attackers::a1"
+  const catWordCounts = {}; // { category: { word: count } }
+  const catDocCounts = {};  // { category: totalDocs }
+  const vocab = new Set();
+  let totalDocs = 0;
+
+  const addDoc = (category, words) => {
+    if (!catWordCounts[category]) catWordCounts[category] = {};
+    catDocCounts[category] = (catDocCounts[category] || 0) + 1;
+    totalDocs++;
+    for (const w of words) {
+      vocab.add(w);
+      catWordCounts[category][w] = (catWordCounts[category][w] || 0) + 1;
+    }
+  };
+
+  // Train from sub-team names
   for (const tk of ["attackers", "midPlayers", "defenders"]) {
     for (const sub of (subteams[tk] || [])) {
-      const cat = tk + "::" + sub.id;
-      // Sub-team name as a doc (double weight)
-      const nameTokens = tokenize(sub.name);
-      if (nameTokens.length) { docs.push({ cat, tokens: nameTokens }); docs.push({ cat, tokens: nameTokens }); }
-      // Each task text as a doc
-      const addTasks = (tasks) => {
+      const cat = `${tk}::${sub.id}`;
+      addDoc(cat, tokenize(sub.name));
+      addDoc(cat, tokenize(sub.name)); // double weight on name
+      // Train from existing tasks at all depths
+      const trainFromTasks = (tasks) => {
         for (const t of (tasks || [])) {
-          const tt = tokenize(t.text);
-          if (tt.length) docs.push({ cat, tokens: tt });
-          if (t.children) addTasks(t.children);
+          addDoc(cat, tokenize(t.text));
+          if (t.children) trainFromTasks(t.children);
         }
       };
-      addTasks(sub.tasks);
-      // Tag keywords
-      const addTags = (tasks) => {
+      trainFromTasks(sub.tasks);
+    }
+  }
+  // Train from tag keywords → map to sub-teams that use those tags
+  for (const tk of ["attackers"]) {
+    for (const sub of (subteams[tk] || [])) {
+      const cat = `${tk}::${sub.id}`;
+      const collectTags = (tasks) => {
         for (const t of (tasks || [])) {
           if (t.tagId) {
-            const tag = (tags || []).find(g => g.id === t.tagId);
-            if (tag && tag.keywords && tag.keywords.length) docs.push({ cat, tokens: tag.keywords.map(k => k.toLowerCase()) });
+            const tag = (tags || []).find(tg => tg.id === t.tagId);
+            if (tag) addDoc(cat, tag.keywords || []);
           }
-          if (t.children) addTags(t.children);
+          if (t.children) collectTags(t.children);
         }
       };
-      addTags(sub.tasks);
+      collectTags(sub.tasks);
     }
   }
-  // Calculate DF (document frequency)
-  for (const doc of docs) {
-    const seen = new Set(doc.tokens);
-    for (const w of seen) df[w] = (df[w] || 0) + 1;
-  }
-  const N = docs.length || 1;
-  // Build per-category TF-IDF vectors
-  const catVecs = {}; // cat → {word: tfidf_sum}
-  const catDocCount = {};
-  for (const doc of docs) {
-    const cat = doc.cat;
-    if (!catVecs[cat]) catVecs[cat] = {};
-    catDocCount[cat] = (catDocCount[cat] || 0) + 1;
-    // TF for this doc
-    const tf = {};
-    for (const w of doc.tokens) tf[w] = (tf[w] || 0) + 1;
-    const maxTf = Math.max(...Object.values(tf));
-    for (const w of Object.keys(tf)) {
-      const tfidf = (tf[w] / maxTf) * Math.log(N / (df[w] || 1));
-      catVecs[cat][w] = (catVecs[cat][w] || 0) + tfidf;
-    }
-  }
-  return { catVecs, catDocCount, df, N };
+  return { catWordCounts, catDocCounts, vocab: [...vocab], totalDocs };
 }
 
-function classifyTFIDF(text, model) {
-  if (!model || !model.N) return [];
-  const tokens = tokenize(text);
-  if (!tokens.length) return [];
-  // Build query TF-IDF vector
-  const qtf = {};
-  for (const w of tokens) qtf[w] = (qtf[w] || 0) + 1;
-  const qMax = Math.max(...Object.values(qtf));
-  const qVec = {};
-  for (const w of Object.keys(qtf)) {
-    qVec[w] = (qtf[w] / qMax) * Math.log(model.N / (model.df[w] || 1));
-  }
-  // Cosine similarity with each category
+function classifyNB(text, model) {
+  if (!model || !model.totalDocs) return [];
+  const words = tokenize(text);
+  if (!words.length) return [];
+  const { catWordCounts, catDocCounts, vocab, totalDocs } = model;
+  const V = vocab.length || 1;
   const results = [];
-  for (const cat of Object.keys(model.catVecs)) {
-    const cv = model.catVecs[cat];
-    let dot = 0, magC = 0, magQ = 0;
-    const allWords = new Set([...Object.keys(cv), ...Object.keys(qVec)]);
-    for (const w of allWords) {
-      const c = cv[w] || 0, q = qVec[w] || 0;
-      dot += c * q; magC += c * c; magQ += q * q;
+
+  for (const cat of Object.keys(catDocCounts)) {
+    // Log prior P(c)
+    let logProb = Math.log((catDocCounts[cat] || 0.1) / totalDocs);
+    const wc = catWordCounts[cat] || {};
+    const totalWords = Object.values(wc).reduce((a, b) => a + b, 0);
+    // Log likelihood P(w|c) with Laplace smoothing
+    for (const w of words) {
+      logProb += Math.log(((wc[w] || 0) + 1) / (totalWords + V));
     }
-    const sim = (magC && magQ) ? dot / (Math.sqrt(magC) * Math.sqrt(magQ)) : 0;
-    const [tk, sid] = cat.split("::");
-    results.push({ tk, sid, sim });
+    const [tk, subId] = cat.split("::");
+    results.push({ category: cat, teamKey: tk, subId, logProb });
   }
-  results.sort((a, b) => b.sim - a.sim);
-  // Normalize to confidence scores
-  const total = results.reduce((a, r) => a + r.sim, 0) || 1;
-  return results.map(r => ({ ...r, conf: r.sim / total }));
+  // Sort by probability (highest first), convert to normalized scores
+  results.sort((a, b) => b.logProb - a.logProb);
+  const maxLog = results[0]?.logProb || 0;
+  const expSum = results.reduce((a, r) => a + Math.exp(r.logProb - maxLog), 0);
+  return results.map(r => ({ ...r, confidence: Math.exp(r.logProb - maxLog) / expSum }));
 }
 
-async function classifyClaude(text, subteams) {
-  // Build category list for the prompt
-  const cats = [];
-  for (const tk of ["attackers", "midPlayers", "defenders"]) {
-    for (const sub of (subteams[tk] || [])) {
-      const sampleTasks = (sub.tasks || []).slice(0, 5).map(t => t.text).join(", ");
-      cats.push({ key: tk + "::" + sub.id, name: sub.name, team: tk, samples: sampleTasks });
-    }
-  }
-  const catList = cats.map(c => c.key + " | " + c.name + " (" + c.team + ")" + (c.samples ? " — e.g. " + c.samples : "")).join("\n");
-  try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 200,
-        messages: [{ role: "user", content: "Classify this task into one of these categories. Return ONLY the category key, nothing else.\n\nCategories:\n" + catList + "\n\nTask: \"" + text + "\"\n\nReturn only the key like: attackers::a1" }]
-      })
-    });
-    const data = await resp.json();
-    const answer = (data.content || []).map(b => b.text || "").join("").trim();
-    const match = answer.match(/^(\w+)::(\w+)$/);
-    if (match) return { tk: match[1], sid: match[2], conf: 0.95, source: "claude" };
-  } catch (e) { /* API unavailable */ }
-  return null;
-}
-
-
-const DEFAULT_SUBTEAMS = {"attackers":[{"id":"a1","name":"LANGUAGES","color":0,"tasks":[{"id":"t041","text":"📚 DAILY TASKS","done":false,"recurring":false,"children":[{"id":"t002","text":"APPS STUDY","done":false,"recurring":false,"children":[{"id":"t001","text":"BRILLIANT","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t009","text":"MARKINGS","done":false,"recurring":false,"children":[{"id":"t006","text":"JAPANESE","done":false,"recurring":false,"children":[{"id":"t003","text":"JISHO","done":false,"recurring":false,"children":[],"links":[]},{"id":"t005","text":"THE 3 MARKINGS KANJIS AT HIGH PRIORITY","done":false,"recurring":false,"children":[{"id":"t004","text":"MINIMUM WORDS LIST","done":false,"recurring":false,"children":[],"links":[]}],"links":[]}],"links":[{"id":"t007","title":"Link","url":"#"},{"id":"t008","title":"PC","url":"#"}]}],"links":[]},{"id":"t028","text":"5 WORDS STUDY","done":false,"recurring":false,"children":[{"id":"t025","text":"JAPANESE","done":false,"recurring":false,"children":[{"id":"t010","text":"N3 GOI","done":false,"recurring":false,"children":[],"links":[{"id":"t011","title":"Link","url":"#"},{"id":"t012","title":"PC","url":"#"}]},{"id":"t013","text":"TECHNICAL WORDS","done":false,"recurring":false,"children":[],"links":[{"id":"t014","title":"Link","url":"#"},{"id":"t015","title":"PC","url":"#"}]},{"id":"t016","text":"ANIME_WORDS","done":false,"recurring":false,"children":[],"links":[{"id":"t017","title":"Link","url":"#"},{"id":"t018","title":"PC","url":"#"}]},{"id":"t019","text":"N2 GOI","done":false,"recurring":false,"children":[],"links":[{"id":"t020","title":"Link","url":"#"},{"id":"t021","title":"PC","url":"#"}]},{"id":"t022","text":"N1 GOI","done":false,"recurring":false,"children":[],"links":[{"id":"t023","title":"Link","url":"#"},{"id":"t024","title":"PC","url":"#"}]}],"links":[{"id":"t026","title":"Link","url":"#"},{"id":"t027","title":"PC","url":"#"}]}],"links":[]},{"id":"t030","text":"WRITING PRACTICE","done":false,"recurring":false,"children":[{"id":"t029","text":"JAPANESE: NOTHING","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t040","text":"READING PRACTICE","done":false,"recurring":false,"children":[{"id":"t031","text":"FORM THE GRAMMAR NOTEBOOK","done":false,"recurring":false,"children":[],"links":[]},{"id":"t035","text":"CHINESE","done":false,"recurring":false,"children":[{"id":"t032","text":"KG CHART","done":false,"recurring":false,"children":[],"links":[{"id":"t033","title":"Link","url":"#"},{"id":"t034","title":"PC","url":"#"}]}],"links":[]},{"id":"t039","text":"BURMESE","done":false,"recurring":false,"children":[{"id":"t036","text":"KG CHART","done":false,"recurring":false,"children":[],"links":[{"id":"t037","title":"Link","url":"#"},{"id":"t038","title":"PC","url":"#"}]}],"links":[]}],"links":[]}],"links":[]},{"id":"t064","text":"⏸️ SUPPRESSED","done":false,"recurring":false,"children":[{"id":"t043","text":"APPS STUDY","done":false,"recurring":false,"children":[{"id":"t042","text":"DUOLINGO HINDI/KOREAN","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t045","text":"MARKINGS","done":false,"recurring":false,"children":[{"id":"t044","text":"CHINESE","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t055","text":"5 WORDS STUDY","done":false,"recurring":false,"children":[{"id":"t054","text":"CHINESE","done":false,"recurring":false,"children":[{"id":"t046","text":"BASIC CHARACTER READING","done":false,"recurring":false,"children":[],"links":[{"id":"t047","title":"Link","url":"#"},{"id":"t048","title":"PC","url":"#"}]},{"id":"t049","text":"HANZI TO PINYIN","done":false,"recurring":false,"children":[],"links":[]},{"id":"t050","text":"CONVERSATION VOCAB IN THE LIST","done":false,"recurring":false,"children":[],"links":[]},{"id":"t051","text":"GROUPS: WIDGET","done":false,"recurring":false,"children":[],"links":[{"id":"t052","title":"Link","url":"#"},{"id":"t053","title":"PC","url":"#"}]}],"links":[]}],"links":[]},{"id":"t056","text":"WRITING PRACTICE","done":false,"recurring":false,"children":[],"links":[]},{"id":"t059","text":"MAPPING","done":false,"recurring":false,"children":[{"id":"t057","text":"JAPANESE SIMILAR WORDS COLLECTION","done":false,"recurring":false,"children":[],"links":[]},{"id":"t058","text":"MAKE COPILOT TO CONVERT DIFFERENCES WITH EXAMPLE SENTENCE","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t063","text":"READING PRACTICE","done":false,"recurring":false,"children":[{"id":"t060","text":"CHINESE","done":false,"recurring":false,"children":[],"links":[]},{"id":"t061","text":"GET THE PDF LINKS ASSIGNED HERE","done":false,"recurring":false,"children":[],"links":[]},{"id":"t062","text":"SPECIALLY THAT JLPT","done":false,"recurring":false,"children":[],"links":[]}],"links":[]}],"links":[]},{"id":"t081","text":"📓 NOTEBOOK MAKING","done":false,"recurring":false,"children":[{"id":"t067","text":"JAPANESE STUDY","done":false,"recurring":false,"children":[{"id":"t065","text":"CREATION OF SENTENCES BASED ON WORDS","done":false,"recurring":false,"children":[],"links":[]},{"id":"t066","text":"ANIME SUBTITLE NOTES","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t073","text":"CHINESE STUDY","done":false,"recurring":false,"children":[{"id":"t068","text":"GRAMMAR NOTEBOOK","done":false,"recurring":false,"children":[],"links":[{"id":"t069","title":"Google Drive","url":"#"},{"id":"t070","title":"OneDrive","url":"#"}]},{"id":"t071","text":"GRAMMER","done":false,"recurring":false,"children":[],"links":[{"id":"t072","title":"Link","url":"#"}]}],"links":[]},{"id":"t080","text":"BURMESE","done":false,"recurring":false,"children":[{"id":"t074","text":"IMAGE PDF","done":false,"recurring":false,"children":[],"links":[]},{"id":"t075","text":"TAKE TRAIL WITH ONENOTE AS WELL","done":false,"recurring":false,"children":[],"links":[]},{"id":"t076","text":"TRY TO GET DATA FROM BURMESE WEBPAGE","done":false,"recurring":false,"children":[],"links":[{"id":"t077","title":"Link","url":"#"}]},{"id":"t078","text":"THE BURMESE GRAMMAR NOTEBOOK","done":false,"recurring":false,"children":[],"links":[{"id":"t079","title":"Link","url":"#"}]}],"links":[]}],"links":[]},{"id":"t089","text":"💻 PC TASKS","done":false,"recurring":false,"children":[{"id":"t084","text":"CHINESE","done":false,"recurring":false,"children":[{"id":"t082","text":"PRINT THE PRONUNCIATIONS CHART","done":false,"recurring":false,"children":[],"links":[{"id":"t083","title":"Link","url":"#"}]}],"links":[]},{"id":"t088","text":"OTHER LANGUAGES","done":false,"recurring":false,"children":[{"id":"t085","text":"PRINT THE ODIYA AND TELUGU CHART","done":false,"recurring":false,"children":[],"links":[{"id":"t086","title":"Link","url":"#"}]},{"id":"t087","text":"WHEN TIME WILL BE RIGHT USE LING APP","done":false,"recurring":false,"children":[],"links":[]}],"links":[]}],"links":[]},{"id":"t113","text":"⏳ ON HOLD","done":false,"recurring":false,"children":[{"id":"t092","text":"JAPANESE","done":false,"recurring":false,"children":[{"id":"t090","text":"KOTOWAZA","done":false,"recurring":false,"children":[],"links":[{"id":"t091","title":"Link","url":"#"}]}],"links":[]},{"id":"t095","text":"BURMESE","done":false,"recurring":false,"children":[{"id":"t093","text":"XXX","done":false,"recurring":false,"children":[],"links":[{"id":"t094","title":"Link","url":"#"}]}],"links":[]},{"id":"t096","text":"OTHER LANGUAGES","done":false,"recurring":false,"children":[],"links":[{"id":"t097","title":"PC","url":"#"}]},{"id":"t100","text":"BANGALA","done":false,"recurring":false,"children":[{"id":"t098","text":"THE KG BOOM IS NOT PREPARING THE DESIRED RESULTS","done":false,"recurring":false,"children":[],"links":[]},{"id":"t099","text":"THEN GENERATE NUMBERS CHART","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t101","title":"PC","url":"#"}]},{"id":"t104","text":"ODIYA","done":false,"recurring":false,"children":[{"id":"t102","text":"MODIFY CHARACTER FORMULA OF INTERMEDIATE","done":false,"recurring":false,"children":[],"links":[]},{"id":"t103","text":"THEN GENERATE NUMBERS CHART","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t105","title":"PC","url":"#"}]},{"id":"t108","text":"TEGULU","done":false,"recurring":false,"children":[{"id":"t106","text":"MODIFY CHARACTER FORMULA OF INTERMEDIATE","done":false,"recurring":false,"children":[],"links":[]},{"id":"t107","text":"THEN GENERATE NUMBERS CHART","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t109","title":"PC","url":"#"}]},{"id":"t110","text":"SPANISH-JAPANESE","done":false,"recurring":false,"children":[],"links":[{"id":"t111","title":"Link","url":"#"},{"id":"t112","title":"PC","url":"#"}]}],"links":[]},{"id":"t124","text":"🎥 VIDEO LECTURES","done":false,"recurring":false,"children":[{"id":"t116","text":"JAPANESE","done":false,"recurring":false,"children":[{"id":"t114","text":"KOTOWAZA","done":false,"recurring":false,"children":[],"links":[{"id":"t115","title":"Link","url":"#"}]}],"links":[]},{"id":"t119","text":"BURMESE","done":false,"recurring":false,"children":[{"id":"t117","text":"XXX","done":false,"recurring":false,"children":[],"links":[{"id":"t118","title":"Link","url":"#"}]}],"links":[]},{"id":"t120","text":"OTHER LANGUAGES","done":false,"recurring":false,"children":[],"links":[{"id":"t121","title":"PC","url":"#"}]},{"id":"t122","text":"BANGALA","done":false,"recurring":false,"children":[],"links":[{"id":"t123","title":"PC","url":"#"}]}],"links":[]}],"links":[{"id":"t317","title":"JISHO","url":"https://jisho.org"}]},{"id":"a2","name":"MECHANICAL","color":1,"tasks":[{"id":"t135","text":"📚 DAILY TASKS","done":false,"recurring":false,"children":[{"id":"t134","text":"1 LESSON READING","done":false,"recurring":false,"children":[{"id":"t126","text":"GD&T","done":false,"recurring":false,"children":[{"id":"t125","text":"X","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t127","title":"Link","url":"#"},{"id":"t128","title":"PC","url":"#"}]},{"id":"t131","text":"SHEET METAL","done":false,"recurring":false,"children":[{"id":"t129","text":"X","done":false,"recurring":false,"children":[],"links":[]},{"id":"t130","text":"REMOVE THE FORMATTING","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t132","title":"Link","url":"#"},{"id":"t133","title":"PC","url":"#"}]}],"links":[]}],"links":[]},{"id":"t167","text":"📓 NOTEBOOK MAKING","done":false,"recurring":false,"children":[{"id":"t142","text":"GD&T","done":false,"recurring":false,"children":[{"id":"t136","text":"UDEMY: NOTEBOOK","done":false,"recurring":false,"children":[],"links":[]},{"id":"t137","text":"PROF_DON TIPS","done":false,"recurring":false,"children":[],"links":[{"id":"t138","title":"Link","url":"#"},{"id":"t139","title":"Tec-ease","url":"#"}]},{"id":"t140","text":"XXXX","done":false,"recurring":false,"children":[],"links":[{"id":"t141","title":"Link","url":"#"}]}],"links":[{"id":"t143","title":"OneDrive","url":"#"}]},{"id":"t147","text":"SHEET METAL","done":false,"recurring":false,"children":[{"id":"t144","text":"UDEMY: NOTEBOOK","done":false,"recurring":false,"children":[],"links":[]},{"id":"t145","text":"READ THE COLLECTED NOTES","done":false,"recurring":false,"children":[],"links":[]},{"id":"t146","text":"THE GEMINI NOTEBOOK KEPT ON HOLD","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t148","title":"OneDrive","url":"#"}]},{"id":"t153","text":"GET THE STUDY FLOW IDEA FROM NOTEBOOKLM","done":false,"recurring":false,"children":[{"id":"t149","text":"START GENERATING NOTEBOOK FILE FOR ACTIVE FOLDER ONLY","done":false,"recurring":false,"children":[],"links":[{"id":"t150","title":"Link","url":"#"}]},{"id":"t151","text":"ASSIGN THE INDEX","done":false,"recurring":false,"children":[],"links":[]},{"id":"t152","text":"PROCESS WITH COPILOT","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t157","text":"TOM","done":false,"recurring":false,"children":[{"id":"t154","text":"UDEMY","done":false,"recurring":false,"children":[],"links":[{"id":"t155","title":"Link","url":"#"}]},{"id":"t156","text":"UPLOAD THE FILE AND START ADDING DATA IN INDEX","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t160","text":"CMTI","done":false,"recurring":false,"children":[{"id":"t158","text":"START GENERATING THE NOTEBOOK BASED ON DATA","done":false,"recurring":false,"children":[],"links":[{"id":"t159","title":"Link","url":"#"}]}],"links":[]},{"id":"t163","text":"MECHANISMS","done":false,"recurring":false,"children":[{"id":"t161","text":"NOTEBOOKLM","done":false,"recurring":false,"children":[],"links":[{"id":"t162","title":"Link","url":"#"}]}],"links":[]},{"id":"t165","text":"HYG","done":false,"recurring":false,"children":[{"id":"t164","text":"FILES SORTING","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t166","title":"Link","url":"#"}]}],"links":[]},{"id":"t168","text":"💻 PC TASKS","done":false,"recurring":false,"children":[],"links":[]},{"id":"t180","text":"🔬 ADVANCED SKILLS","done":false,"recurring":false,"children":[{"id":"t169","text":"ELECTRONICS","done":false,"recurring":false,"children":[],"links":[]},{"id":"t172","text":"ROBOTICS","done":false,"recurring":false,"children":[{"id":"t170","text":"EV3 PYTHON COURSE?","done":false,"recurring":false,"children":[],"links":[]},{"id":"t171","text":"ARDUINO ROBOTICS","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t173","text":"ELECTRICAL","done":false,"recurring":false,"children":[],"links":[]},{"id":"t174","text":"CAD MECHANISMS","done":false,"recurring":false,"children":[],"links":[{"id":"t175","title":"PC","url":"#"}]},{"id":"t176","text":"MECHANICS","done":false,"recurring":false,"children":[],"links":[{"id":"t177","title":"PC","url":"#"}]},{"id":"t178","text":"MATERIAL STUDY","done":false,"recurring":false,"children":[],"links":[]},{"id":"t179","text":"PLASTICS","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t187","text":"🎥 VIDEO LECTURES","done":false,"recurring":false,"children":[{"id":"t181","text":"SEE THE MECHANICAL DESIGN VIDEOS","done":false,"recurring":false,"children":[],"links":[{"id":"t182","title":"Link","url":"#"}]},{"id":"t183","text":"REAL ENGINEERING","done":false,"recurring":false,"children":[],"links":[{"id":"t184","title":"Link","url":"#"}]},{"id":"t185","text":"MIRO TUTORIAL","done":false,"recurring":false,"children":[],"links":[{"id":"t186","title":"Link","url":"#"}]}],"links":[]}],"links":[]},{"id":"a3","name":"PROGRAMMING AND AI","color":2,"tasks":[{"id":"t210","text":"📚 DAILY TASKS","done":false,"recurring":false,"children":[{"id":"t206","text":"1 LESSON READING","done":false,"recurring":false,"children":[{"id":"t188","text":"PYTHON FUNDAMENTALS FOR ML","done":false,"recurring":false,"children":[],"links":[{"id":"t189","title":"Link","url":"#"},{"id":"t190","title":"PC","url":"#"}]},{"id":"t195","text":"PYTHON LIBRARIES","done":false,"recurring":false,"children":[{"id":"t191","text":"GET THE DATA PROVIDED BY AUTHOR","done":false,"recurring":false,"children":[],"links":[{"id":"t192","title":"Link","url":"#"}]},{"id":"t193","text":"REPLACE ' WITH '","done":false,"recurring":false,"children":[],"links":[]},{"id":"t194","text":"REPLACE","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t196","title":"Link","url":"#"},{"id":"t197","title":"PC","url":"#"}]},{"id":"t198","text":"SQL","done":false,"recurring":false,"children":[],"links":[{"id":"t199","title":"Link","url":"#"},{"id":"t200","title":"PC","url":"#"},{"id":"t201","title":"OneDrive","url":"#"}]},{"id":"t202","text":"C LANGUAGE","done":false,"recurring":false,"children":[],"links":[{"id":"t203","title":"Link","url":"#"},{"id":"t204","title":"PC","url":"#"},{"id":"t205","title":"OneDrive","url":"#"}]}],"links":[]},{"id":"t209","text":"UDEMY LESSON","done":false,"recurring":false,"children":[{"id":"t207","text":"PYTHON","done":false,"recurring":false,"children":[],"links":[{"id":"t208","title":"Launch","url":"#"}]}],"links":[]}],"links":[]},{"id":"t231","text":"📓 NOTEBOOK MAKING","done":false,"recurring":false,"children":[{"id":"t214","text":"SQL","done":false,"recurring":false,"children":[{"id":"t211","text":"UDEMY: NOTEBOOK","done":false,"recurring":false,"children":[],"links":[]},{"id":"t212","text":"CODING PRACTICE","done":false,"recurring":false,"children":[],"links":[{"id":"t213","title":"Practice","url":"#"}]}],"links":[]},{"id":"t220","text":"PYTHON","done":false,"recurring":false,"children":[{"id":"t215","text":"COLOR CODES OF INDEX (ALL)","done":false,"recurring":false,"children":[],"links":[]},{"id":"t216","text":"COLLECT THE TRANSCRIPTS","done":false,"recurring":false,"children":[],"links":[]},{"id":"t217","text":"CONFIRM THE DATA PROCESSING ENGINE FIRST","done":false,"recurring":false,"children":[],"links":[]},{"id":"t218","text":"START ADDING THE EXTRACT OF LESSONS TO THE INDEX","done":false,"recurring":false,"children":[],"links":[]},{"id":"t219","text":"START TALLYING DATA, ADDING PICTURES AND RUNNING CODES","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t221","title":"Udemy","url":"#"},{"id":"t222","title":"Link","url":"#"}]},{"id":"t223","text":"IMAGE PROCESSING","done":false,"recurring":false,"children":[],"links":[{"id":"t224","title":"D_drive","url":"#"}]},{"id":"t225","text":"AUTOMATE THE BORING STUFF WITH PYTHON","done":false,"recurring":false,"children":[],"links":[{"id":"t226","title":"Link","url":"#"},{"id":"t227","title":"OneDrive","url":"#"}]},{"id":"t228","text":"DATA ANALYSIS","done":false,"recurring":false,"children":[],"links":[{"id":"t229","title":"Udemy","url":"#"},{"id":"t230","title":"Link","url":"#"}]}],"links":[]},{"id":"t234","text":"💻 PC TASKS","done":false,"recurring":false,"children":[{"id":"t232","text":"PROGRAMMING DATA SORTING TASK","done":false,"recurring":false,"children":[],"links":[{"id":"t233","title":"Link","url":"#"}]}],"links":[]},{"id":"t244","text":"⏳ ON HOLD","done":false,"recurring":false,"children":[{"id":"t238","text":"C","done":false,"recurring":false,"children":[{"id":"t235","text":"CODING WITH HARRY","done":false,"recurring":false,"children":[],"links":[{"id":"t236","title":"Notebook","url":"#"}]},{"id":"t237","text":"WHAT IS LEETCODE?","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t239","text":"C++","done":false,"recurring":false,"children":[],"links":[]},{"id":"t243","text":"JAVASCRIPT","done":false,"recurring":false,"children":[{"id":"t242","text":"THE MECHANICAL CALCULATIONS APP IS NOT PERFECT","done":false,"recurring":false,"children":[{"id":"t240","text":"FIND ALTERNATIVE","done":false,"recurring":false,"children":[],"links":[]},{"id":"t241","text":"ELSE I WILL BUILD ONE FOR ME","done":false,"recurring":false,"children":[],"links":[]}],"links":[]}],"links":[]}],"links":[]},{"id":"t255","text":"🎥 VIDEO LECTURES","done":false,"recurring":false,"children":[{"id":"t247","text":"JAPANESE","done":false,"recurring":false,"children":[{"id":"t245","text":"KOTOWAZA","done":false,"recurring":false,"children":[],"links":[{"id":"t246","title":"Link","url":"#"}]}],"links":[]},{"id":"t250","text":"BURMESE","done":false,"recurring":false,"children":[{"id":"t248","text":"XXX","done":false,"recurring":false,"children":[],"links":[{"id":"t249","title":"Link","url":"#"}]}],"links":[]},{"id":"t251","text":"OTHER LANGUAGES","done":false,"recurring":false,"children":[],"links":[{"id":"t252","title":"PC","url":"#"}]},{"id":"t253","text":"BANGALA","done":false,"recurring":false,"children":[],"links":[{"id":"t254","title":"PC","url":"#"}]}],"links":[]}],"links":[{"id":"t318","title":"AMY BHAI AI STUDY","url":"#"},{"id":"t319","title":"NUMPY PANDAS MATLAB","url":"#"}]},{"id":"a4","name":"12TH","color":3,"tasks":[{"id":"t272","text":"📚 DAILY TASKS","done":false,"recurring":false,"children":[{"id":"t268","text":"1 LESSON READING","done":false,"recurring":false,"children":[{"id":"t265","text":"MATHEMATICS FOR MACHINE LEARNING","done":false,"recurring":false,"children":[{"id":"t260","text":"LINEAR ALGEBRA","done":false,"recurring":false,"children":[{"id":"t256","text":"VECTOR","done":false,"recurring":false,"children":[],"links":[{"id":"t257","title":"Link","url":"#"}]},{"id":"t258","text":"MATRIX TRANSFORMATIONS","done":false,"recurring":false,"children":[],"links":[{"id":"t259","title":"Link","url":"#"}]}],"links":[]},{"id":"t261","text":"MATRICES","done":false,"recurring":false,"children":[],"links":[{"id":"t262","title":"Link","url":"#"}]},{"id":"t263","text":"CALCULUS","done":false,"recurring":false,"children":[],"links":[{"id":"t264","title":"Link","url":"#"}]}],"links":[{"id":"t266","title":"Link","url":"#"},{"id":"t267","title":"PC","url":"#"}]}],"links":[]},{"id":"t271","text":"KHAN ACADEMY LECTURE","done":false,"recurring":false,"children":[{"id":"t269","text":"CLASS: KHAN ACADEMY","done":false,"recurring":false,"children":[],"links":[{"id":"t270","title":"Khan Academy","url":"#"}]}],"links":[]}],"links":[]},{"id":"t301","text":"📓 NOTEBOOK MAKING","done":false,"recurring":false,"children":[{"id":"t288","text":"STATISTICS","done":false,"recurring":false,"children":[{"id":"t273","text":"DATA COLLECTION","done":false,"recurring":false,"children":[],"links":[{"id":"t274","title":"Link","url":"#"},{"id":"t275","title":"Excel","url":"#"}]},{"id":"t281","text":"NORMAL DISTRIBUTION CALCULATOR","done":false,"recurring":false,"children":[{"id":"t276","text":"PAGE 1","done":false,"recurring":false,"children":[],"links":[{"id":"t277","title":"Link","url":"#"}]},{"id":"t278","text":"COLAB - PROBLEM SOLVING","done":false,"recurring":false,"children":[],"links":[{"id":"t279","title":"Link","url":"#"}]},{"id":"t280","text":"AMY BHAI SUGGESTION","done":false,"recurring":false,"children":[],"links":[]}],"links":[{"id":"t282","title":"Link","url":"#"}]},{"id":"t287","text":"NOTEBOOK INDEX MARKING","done":false,"recurring":false,"children":[{"id":"t283","text":"ADDING BULLET POINTS","done":false,"recurring":false,"children":[],"links":[]},{"id":"t284","text":"READING TRAIL","done":false,"recurring":false,"children":[],"links":[]},{"id":"t285","text":"IF NOT WORKING","done":false,"recurring":false,"children":[],"links":[]},{"id":"t286","text":"36657/*REDUCTION OF NOTES","done":false,"recurring":false,"children":[],"links":[]}],"links":[]}],"links":[{"id":"t289","title":"Google Drive","url":"#"},{"id":"t290","title":"Link","url":"#"}]},{"id":"t294","text":"NCERT BOOKS","done":false,"recurring":false,"children":[{"id":"t291","text":"MATHEMATICS","done":false,"recurring":false,"children":[],"links":[{"id":"t292","title":"OneDrive","url":"#"}]},{"id":"t293","text":"SCIENCE","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t298","text":"VERITASIUM","done":false,"recurring":false,"children":[{"id":"t295","text":"MATHEMATICS","done":false,"recurring":false,"children":[],"links":[{"id":"t296","title":"OneDrive","url":"#"}]},{"id":"t297","text":"SCIENCE","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t299","text":"COLLEGE NOTES","done":false,"recurring":false,"children":[],"links":[]},{"id":"t300","text":"THAT GEOMETRY BOOK (EASIER AFTER PROPER NOTE MAKING)","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t304","text":"💻 PC TASKS","done":false,"recurring":false,"children":[{"id":"t302","text":"MECHANICAL","done":false,"recurring":false,"children":[],"links":[]},{"id":"t303","text":"PHYSICS","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"t305","text":"⏳ ON HOLD","done":false,"recurring":false,"children":[],"links":[]},{"id":"t316","text":"🎥 VIDEO LECTURES","done":false,"recurring":false,"children":[{"id":"t308","text":"JAPANESE","done":false,"recurring":false,"children":[{"id":"t306","text":"KOTOWAZA","done":false,"recurring":false,"children":[],"links":[{"id":"t307","title":"Link","url":"#"}]}],"links":[]},{"id":"t311","text":"BURMESE","done":false,"recurring":false,"children":[{"id":"t309","text":"XXX","done":false,"recurring":false,"children":[],"links":[{"id":"t310","title":"Link","url":"#"}]}],"links":[]},{"id":"t312","text":"OTHER LANGUAGES","done":false,"recurring":false,"children":[],"links":[{"id":"t313","title":"PC","url":"#"}]},{"id":"t314","text":"BANGALA","done":false,"recurring":false,"children":[],"links":[{"id":"t315","title":"PC","url":"#"}]}],"links":[]}],"links":[]}],"midPlayers":[{"id":"m1","name":"Food Department","color":0,"tasks":[{"id":"t320","text":"Buy the stuffs","done":false,"recurring":false,"children":[],"links":[]},{"id":"t321","text":"Cook rice","done":false,"recurring":false,"children":[],"links":[]},{"id":"t322","text":"Make curry","done":false,"recurring":false,"children":[],"links":[]},{"id":"t324","text":"Make tea","done":false,"recurring":false,"children":[{"id":"t323","text":"XXX","done":false,"recurring":false,"children":[],"links":[]}],"links":[]}],"links":[]},{"id":"m2","name":"Grocery","color":1,"tasks":[],"links":[]},{"id":"m3","name":"Shopping","color":2,"tasks":[],"links":[]},{"id":"m4","name":"Exercise","color":3,"tasks":[{"id":"t325","text":"Daily exercise routine","done":false,"recurring":false,"children":[],"links":[]}],"links":[]}],"defenders":[{"id":"d1","name":"FASHION TEAM","color":0,"tasks":[{"id":"t326","text":"FASHION CHECK","done":false,"recurring":false,"children":[],"links":[]},{"id":"t327","text":"WARDROBE REVIEW","done":false,"recurring":false,"children":[],"links":[]},{"id":"t328","text":"OUTFIT PLANNING","done":false,"recurring":false,"children":[],"links":[]}],"links":[]},{"id":"d2","name":"SLEEP TEAM","color":1,"tasks":[{"id":"t329","text":"SLEEP TRACKER","done":false,"recurring":true,"children":[],"links":[],"isSleepTracker":true}],"links":[]}]}
-;
+const DEFAULT_SUBTEAMS = {
+  attackers: [
+    { id: "a1", name: "LANGUAGE STUDY", color: 0, tasks: [], links: [] },
+    { id: "a2", name: "AI STUDY", color: 1, tasks: [], links: [{ title: "CHATGPT", url: "https://chat.openai.com" },{ title: "CLAUDE", url: "https://claude.ai" },{ title: "HUGGING FACE", url: "https://huggingface.co" }] },
+    { id: "a3", name: "MECHANICAL", color: 2, tasks: [] },
+    { id: "a4", name: "APP BUILDING", color: 3, tasks: [], links: [] },
+  ],
+  midPlayers: [
+    { id: "m1", name: "Food Department", color: 0, tasks: [{ id: "m1t1", text: "Bill entry", done: false, recurring: true },{ id: "m1t2", text: "Cook lunch", done: false, recurring: true },{ id: "m1t3", text: "Cook dinner", done: false, recurring: true }] },
+    { id: "m2", name: "Grocery", color: 1, tasks: [] },
+    { id: "m3", name: "Shopping", color: 2, tasks: [] },
+    { id: "m4", name: "Exercise", color: 3, tasks: [{ id: "m4t1", text: "Workout session", done: false, recurring: true }] },
+  ],
+  defenders: [
+    { id: "d1", name: "FASHION TEAM", color: 0, tasks: [{ id: "d1t1", text: "WASH FACE", done: false, recurring: true },{ id: "d1t2", text: "CLEAN CLOTHES", done: false, recurring: true },{ id: "d1t3", text: "IRON CLOTHES", done: false, recurring: true }] },
+    { id: "d2", name: "SLEEP TEAM", color: 1, tasks: [{ id: "d2t1", text: "SLEEP 8 HOURS", done: false, recurring: true, isSleepTracker: true }] },
+  ],
+};
 
 const DEFAULT_COACH = { weekdayMinimums:{attackers:2,midPlayers:2,defenders:2}, weekendMinimums:{attackers:1,midPlayers:3,defenders:3}, punishmentDuration:24, cooldownHours:5, overridePenalty:5, ignoredDaysTrigger:3, dailyIgnorePenalty:3 };
 const DEFAULT_FONTS = { attackers:"blackops", midPlayers:"dmsans", defenders:"orbitron", coach:"spacemono" };
 
 const DEFAULT_TAGS = [
-  { id:"tag_jp", name:"JAPANESE", color:"#E53935", keywords:["japanese","kanji","hiragana","katakana","jlpt","nihongo","n5","n4","n3","n2","n1","jisho","kotowaza","anime","goi","kanjis","markings"] },
+  { id:"tag_jp", name:"JAPANESE", color:"#E53935", keywords:["japanese","kanji","hiragana","katakana","jlpt","nihongo","n5","n4","n3","n2","n1"] },
   { id:"tag_br", name:"BURMESE", color:"#FF8F00", keywords:["burmese","myanmar","zawgyi","unicode","မြန်မာ"] },
-  { id:"tag_cn", name:"CHINESE", color:"#D81B60", keywords:["chinese","mandarin","pinyin","hanzi","hsk","中文","odiya","tegulu","bangala","ling app","hindi","korean","duolingo","spanish"] },
-  { id:"tag_ai", name:"AI / ML", color:"#7B1FA2", keywords:["ai","ml","model","neural","gpt","llm","training","dataset","transformer","prompt","fine-tune","rag","machine learning","random forest","naive bayes","preprocessing","numpy","pandas","colab","tensorflow"] },
-  { id:"tag_react", name:"REACT", color:"#1E88E5", keywords:["react","jsx","component","hook","usestate","useeffect","frontend","tailwind","css","javascript","app building","ui"] },
-  { id:"tag_db", name:"DATABASE", color:"#00897B", keywords:["sql","supabase","database","query","schema","table","postgres","migration","row","column","data sorting","data collection"] },
-  { id:"tag_deploy", name:"DEPLOY", color:"#43A047", keywords:["deploy","github","pages","hosting","build","ci","cd","pipeline","vercel","netlify","onedrive","google drive"] },
-  { id:"tag_mech", name:"MECHANICAL", color:"#6D4C41", keywords:["mechanical","engine","thermal","fluid","design","cad","solidworks","ansys","fea","manufacturing","gd&t","sheet metal","tom","cmti","hyg","mechanisms","sfd","bmd","robotics","arduino","ev3","electrical","electronics","plastics","material"] },
-  { id:"tag_lang", name:"LANGUAGE", color:"#F4511E", keywords:["language","grammar","vocab","vocabulary","flashcard","quiz","alphabet","script","phonetic","writing practice","reading practice","words study","notebook making","grammer","pronunciation","sentence","subtitle"] },
-  { id:"tag_doc", name:"DOCUMENTATION", color:"#5C6BC0", keywords:["doc","documentation","readme","write-up","report","notes","wiki","notebook","index","formatting","bullet points"] },
-  { id:"tag_math", name:"MATH / 12TH", color:"#0097A7", keywords:["mathematics","calculus","algebra","vector","matrix","matrices","statistics","anova","mean","median","mode","geometry","ncert","khan academy","veritasium","normal distribution","pearson"] },
-  { id:"tag_py", name:"PYTHON", color:"#FFA000", keywords:["python","pip","jupyter","pandas","numpy","matplotlib","automate","boring stuff","udemy","library","libraries","fundamentals"] },
-  { id:"tag_study", name:"STUDY", color:"#8E24AA", keywords:["lesson","reading","study","lecture","video","course","tutorial","brilliant","khan","udemy","practice","learning","book"] },
+  { id:"tag_cn", name:"CHINESE", color:"#D81B60", keywords:["chinese","mandarin","pinyin","hanzi","hsk","中文"] },
+  { id:"tag_ai", name:"AI / ML", color:"#7B1FA2", keywords:["ai","ml","model","neural","gpt","llm","training","dataset","transformer","prompt","fine-tune","rag"] },
+  { id:"tag_react", name:"REACT", color:"#1E88E5", keywords:["react","jsx","component","hook","usestate","useeffect","frontend","tailwind","css"] },
+  { id:"tag_db", name:"DATABASE", color:"#00897B", keywords:["sql","supabase","database","query","schema","table","postgres","migration","row","column"] },
+  { id:"tag_deploy", name:"DEPLOY", color:"#43A047", keywords:["deploy","github","pages","hosting","build","ci","cd","pipeline","vercel","netlify"] },
+  { id:"tag_mech", name:"MECHANICAL", color:"#6D4C41", keywords:["mechanical","engine","thermal","fluid","design","cad","solidworks","ansys","fea","manufacturing"] },
+  { id:"tag_lang", name:"LANGUAGE", color:"#F4511E", keywords:["language","grammar","vocab","vocabulary","flashcard","quiz","alphabet","script","phonetic"] },
+  { id:"tag_doc", name:"DOCUMENTATION", color:"#5C6BC0", keywords:["doc","documentation","readme","write-up","report","notes","wiki"] },
 ];
 
 // Auto-tag: scan text against all tag keywords, return best match tag id or null
@@ -434,12 +363,12 @@ function TeamTaskManager() {
   const [newTagColor, setNewTagColor] = useState("#7B1FA2");
   const [newTagKeywords, setNewTagKeywords] = useState("");
   const [editingTag, setEditingTag] = useState(null); // tag id being edited
-  const [collapsedTasks, setCollapsedTasks] = useState(new Set()); // collapsed task IDs
-  const [homeMode, setHomeMode] = useState("dashboard"); // "chat" | "dashboard"
+  const [homeMode, setHomeMode] = useState("chat"); // "chat" | "dashboard"
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
-  const [chatPending, setChatPending] = useState(null); // {text} awaiting route confirm
-  const [chatLoading, setChatLoading] = useState(false);
+  const [chatStep, setChatStep] = useState(null); // null | "idle" | "awaiting_confirm" | "show_team"
+  const [chatSuggestions, setChatSuggestions] = useState([]); // NB results for routing
+  const [chatPendingTask, setChatPendingTask] = useState(null); // {text, teamKey, subId}
   const [loaded, setLoaded] = useState(false);
   const [autoTheme, setAutoTheme] = useState(isDayTime() ? "light" : "dark");
   const [fieldSelected, setFieldSelected] = useState(null);
@@ -451,34 +380,10 @@ function TeamTaskManager() {
   const T = makeTeamColors(themeMode);
   const P_ALL = state ? buildP(state.fonts || DEFAULT_FONTS) : buildP(DEFAULT_FONTS);
 
-  useEffect(() => { async function load() { try {
-    // 1. Try loading saved state from Supabase chat_memory
-    const rows = await supaGet("mind_map_app_chat_memory?key=eq.squad_state&select=value");
-    if (rows.length && rows[0].value) {
-      const p = JSON.parse(rows[0].value);
-      const merged = {...DEFAULT_STATE,...p,fonts:{...DEFAULT_FONTS,...(p.fonts||{})}};
-      if (merged.subteams) { for (const tk of ["attackers","midPlayers","defenders"]) { if (merged.subteams[tk]) merged.subteams[tk] = merged.subteams[tk].map(sub => ({...sub, tasks: migrateTasks(sub.tasks)})); } }
-      setState(merged);
-    } else {
-      // 2. First time: build state from relational tables
-      const built = await buildStateFromDB();
-      if (built) { setState(built); } else { setState({...DEFAULT_STATE}); }
-    }
-  } catch(e) { console.error("Supabase load error:", e); setState({...DEFAULT_STATE}); } setLoaded(true); } load(); }, []);
-  useEffect(() => { if (!state || !loaded) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => { try {
-      const val = JSON.stringify(state);
-      const existing = await supaGet("mind_map_app_chat_memory?key=eq.squad_state&select=id");
-      if (existing.length) {
-        await supaPatch("mind_map_app_chat_memory?key=eq.squad_state", { value: val, updated_at: new Date().toISOString() });
-      } else {
-        await supaPost("mind_map_app_chat_memory", { id: generateUUID(), key: "squad_state", value: val });
-      }
-    } catch(e) { console.error("Supabase save error:", e); } }, 1500);
-  }, [state, loaded]);
+  useEffect(() => { async function load() { try { const raw = localStorage.getItem(APP_KEY); if (raw) { const p = JSON.parse(raw); const merged = {...DEFAULT_STATE,...p,fonts:{...DEFAULT_FONTS,...p.fonts}}; /* Migrate attacker tasks to have children arrays */ if (merged.subteams?.attackers) { merged.subteams = {...merged.subteams, attackers: merged.subteams.attackers.map(sub => ({...sub, tasks: migrateAttackerTasks(sub.tasks)}))}; } setState(merged); } else setState({...DEFAULT_STATE}); } catch(e) { setState({...DEFAULT_STATE}); } setLoaded(true); } load(); }, []);
+  useEffect(() => { if (state && loaded) try { localStorage.setItem(APP_KEY, JSON.stringify(state)); } catch(e) {} }, [state, loaded]);
   useEffect(() => { if (!state) return; const now = new Date(); const mk = `${now.getFullYear()}-${now.getMonth()}`; if (state.lastResetMonth !== mk && now.getDate() === 1) setState(p => { const nc = {...p.credits}; for (const t of ["attackers","midPlayers","defenders"]) if (nc[t] < 100) nc[t] = 100; return {...p,credits:nc,lastResetMonth:mk}; }); }, [state]);
-  useEffect(() => { if (!state) return; const today = getTodayKey(); if (state.dailyLog[today]?.resetDone) return; setState(p => { const ns = {}; for (const tk of ["attackers","midPlayers","defenders"]) { ns[tk] = p.subteams[tk].map(sub => ({...sub, tasks: resetTreeRecurring(sub.tasks)})); } return {...p,subteams:ns,dailyLog:{...p.dailyLog,[today]:{resetDone:true,completions:p.dailyLog[today]?.completions||{attackers:0,midPlayers:0,defenders:0}}}}; }); }, [state]);
+  useEffect(() => { if (!state) return; const today = getTodayKey(); if (state.dailyLog[today]?.resetDone) return; setState(p => { const ns = {}; for (const tk of ["attackers","midPlayers","defenders"]) { if (tk === "attackers") { ns[tk] = p.subteams[tk].map(sub => ({...sub, tasks: resetTreeRecurring(sub.tasks)})); } else { ns[tk] = p.subteams[tk].map(sub => ({...sub,tasks:sub.tasks.map(t => t.recurring ? {...t,done:false} : t)})); } } return {...p,subteams:ns,dailyLog:{...p.dailyLog,[today]:{resetDone:true,completions:p.dailyLog[today]?.completions||{attackers:0,midPlayers:0,defenders:0}}}}; }); }, [state]);
 
   const TC = (tk) => T[tk];
   const getComp = useCallback((tk) => state?.dailyLog[getTodayKey()]?.completions?.[tk] || 0, [state]);
@@ -490,26 +395,21 @@ function TeamTaskManager() {
     setState(p => {
       const today = getTodayKey(); const pm = {attackers:1,midPlayers:5,defenders:10};
       const ns = {...p.subteams};
-      ns[tk] = p.subteams[tk].map(sub => {
-        if (sub.id !== sid) return sub;
-        if (sv) {
-          // Sleep tracker special case
-          const updateSleep = (tasks) => tasks.map(t => {
-            if (t.id === tid && t.isSleepTracker) return {...t, done:true, sleepHours:parseFloat(sv)};
-            if (t.children) return {...t, children: updateSleep(t.children)};
-            return t;
-          });
-          return {...sub, tasks: updateSleep(sub.tasks)};
-        }
-        return { ...sub, tasks: toggleTaskInTree(sub.tasks, tid) };
-      });
-      const task = (() => { for (const s of p.subteams[tk]) { const f = findInTree(s.tasks, tid); if (f) return f; } return null; })();
+      if (tk === "attackers") {
+        ns[tk] = p.subteams[tk].map(sub => {
+          if (sub.id !== sid) return sub;
+          return { ...sub, tasks: toggleTaskInTree(sub.tasks, tid) };
+        });
+      } else {
+        ns[tk] = p.subteams[tk].map(sub => { if (sub.id !== sid) return sub; return {...sub,tasks:sub.tasks.map(t => { if (t.id !== tid) return t; if (t.isSleepTracker && sv) return {...t,done:true,sleepHours:parseFloat(sv)}; return {...t,done:!t.done}; })}; });
+      }
+      const task = tk === "attackers"
+        ? (() => { for (const s of p.subteams[tk]) { const f = findInTree(s.tasks, tid); if (f) return f; } return null; })()
+        : p.subteams[tk].find(s => s.id === sid)?.tasks.find(t => t.id === tid);
       const wasDone = task?.done;
       const nc = {...p.dailyLog[today]?.completions||{attackers:0,midPlayers:0,defenders:0}}; nc[tk] = (nc[tk]||0) + (wasDone ? -1 : 1);
       const cr = {...p.credits}; cr[tk] = Math.max(0, cr[tk] + (wasDone ? -pm[tk] : pm[tk]));
-      const allMidDone = ns.midPlayers.every(s => !s.tasks.length || countAllTasks(s.tasks) === countDoneTasks(s.tasks));
-      const allDefDone = ns.defenders.every(s => !s.tasks.length || countAllTasks(s.tasks) === countDoneTasks(s.tasks));
-      if (allMidDone && allDefDone && !wasDone) cr.attackers += isWeekend() ? 3 : 5;
+      if (ns.midPlayers.every(s => !s.tasks.length || s.tasks.every(t => t.done)) && ns.defenders.every(s => !s.tasks.length || s.tasks.every(t => t.done)) && !wasDone) cr.attackers += isWeekend() ? 3 : 5;
       let ld = p.lockdown; for (const t of ["attackers","midPlayers","defenders"]) { if (cr[t] <= 0 && !ld) ld = {triggeredBy:t,until:new Date(Date.now()+p.coach.cooldownHours*3600000).toISOString(),resolved:false}; }
       return {...p,subteams:ns,credits:cr,lockdown:ld,dailyLog:{...p.dailyLog,[today]:{resetDone:true,completions:nc}}};
     });
@@ -517,9 +417,9 @@ function TeamTaskManager() {
 
   const addTask = useCallback((tk, sid, text, parentId) => setState(p => {
     const ns = {...p.subteams};
-    const tagId = autoTagText(text, p.tags || DEFAULT_TAGS);
-    const newTask = { id: generateId(), text: (tk==="attackers"||tk==="defenders") ? text.toUpperCase() : text, done: false, recurring: false, children: [], links: [], tagId: tagId || undefined };
-    if (parentId) {
+    const tagId = tk === "attackers" ? autoTagText(text, p.tags || DEFAULT_TAGS) : undefined;
+    const newTask = { id: generateId(), text: (tk==="attackers"||tk==="defenders") ? text.toUpperCase() : text, done: false, recurring: false, children: tk === "attackers" ? [] : undefined, links: tk === "attackers" ? [] : undefined, tagId: tagId || undefined };
+    if (parentId && tk === "attackers") {
       ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: addChildToTree(sub.tasks, parentId, newTask) });
     } else {
       ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: [...sub.tasks, newTask] });
@@ -558,26 +458,13 @@ function TeamTaskManager() {
   const updateTag = useCallback((tagId, field, value) => setState(p => ({
     ...p, tags: (p.tags||[]).map(t => t.id !== tagId ? t : {...t, [field]: field === "keywords" ? value.split(",").map(k=>k.trim().toLowerCase()).filter(Boolean) : field === "name" ? value.toUpperCase() : value})
   })), []);
-  const autoTagAll = useCallback(() => setState(p => {
-    const tags = p.tags || [];
-    function tagTree(tasks, parentText) {
-      return tasks.map(t => {
-        // Build context: combine own text + parent text for better matching
-        const context = (parentText ? parentText + " " : "") + t.text;
-        const bestTag = autoTagText(context, tags);
-        const newChildren = t.children ? tagTree(t.children, t.text) : [];
-        return { ...t, tagId: bestTag || t.tagId, children: newChildren };
-      });
-    }
-    const ns = {};
-    for (const tk of ["attackers","midPlayers","defenders"]) {
-      ns[tk] = p.subteams[tk].map(sub => ({ ...sub, tasks: tagTree(sub.tasks, "") }));
-    }
-    return { ...p, subteams: ns };
-  }), []);
   const removeTask = useCallback((tk, sid, tid) => setState(p => {
     const ns = {...p.subteams};
-    ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: removeFromTree(sub.tasks, tid) });
+    if (tk === "attackers") {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: removeFromTree(sub.tasks, tid) });
+    } else {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: sub.tasks.filter(t => t.id !== tid) });
+    }
     return {...p, subteams: ns};
   }), []);
   const submitCoachSession = useCallback(() => { setState(p => ({...p,coachSessions:[...p.coachSessions,{id:generateId(),date:new Date().toISOString(),answers:{...sessionAnswers},triggeredBy:p.lockdown?.triggeredBy||"manual"}],lockdown:p.lockdown?{...p.lockdown,resolved:true,until:new Date(Date.now()+p.coach.cooldownHours*3600000).toISOString()}:null})); setSessionAnswers({}); setShowCoachSession(false); }, [sessionAnswers]);
@@ -599,9 +486,6 @@ function TeamTaskManager() {
       return {...p, focusedTasks: ft};
     });
   }, []);
-  const toggleCollapse = (taskId) => setCollapsedTasks(prev => { const n = new Set(prev); if (n.has(taskId)) n.delete(taskId); else n.add(taskId); return n; });
-  const collapseAll = (tasks) => { const ids = new Set(); const walk = (ts) => ts.forEach(t => { if (t.children?.length) { ids.add(t.id); walk(t.children); } }); walk(tasks); setCollapsedTasks(prev => { const n = new Set(prev); ids.forEach(id => n.add(id)); return n; }); };
-  const expandAll = (tasks) => { const ids = new Set(); const walk = (ts) => ts.forEach(t => { if (t.children?.length) { ids.add(t.id); walk(t.children); } }); walk(tasks); setCollapsedTasks(prev => { const n = new Set(prev); ids.forEach(id => n.delete(id)); return n; }); };
 
   const addWeeklyPlanTask = (dayKey, teamKey, text) => {
     if (!text.trim()) return;
@@ -627,131 +511,101 @@ function TeamTaskManager() {
     });
   };
 
-  /* ─── CHAT ENGINE (TF-IDF + Claude API fallback) ─── */
-  const tfidfRef = useRef(null);
-  const chatEndRef = useRef(null);
-  const chatInputRef = useRef(null);
-  const saveTimerRef = useRef(null);
-
-  // Rebuild TF-IDF model when state changes
+  /* ─── CHAT ENGINE (hooks must be before guard) ─── */
+  const nbModelRef = useRef(null);
   useEffect(() => {
     if (state && state.subteams) {
-      try { tfidfRef.current = buildTFIDF(state.subteams, state.tags || []); } catch (e) { tfidfRef.current = null; }
+      try { nbModelRef.current = buildNBClassifier(state.subteams, state.tags || []); } catch(e) { nbModelRef.current = null; }
     }
   }, [state]);
 
-  // Auto-scroll chat
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
+  const mkCoach = (content, data) => ({ id: generateId(), from: "coach", content, data, ts: Date.now() });
+  const mkUser = (content) => ({ id: generateId(), from: "user", content, ts: Date.now() });
 
-  // Init chat with one compact briefing when switching to chat mode
   useEffect(() => {
-    if (!state || !loaded || homeMode !== "chat" || chatMessages.length > 0) return;
+    if (!state || !state.subteams || !loaded || homeMode !== "chat") return;
+    if (chatMessages.length > 0) return;
     const wknd = isWeekend();
-    const P = wknd
-      ? { greet: "🛡️ Weekend. Shields up first.", sub: "Defense and maintenance today. What needs adding?" }
-      : { greet: "⚔️ Weekday. Attack mode.", sub: "Strike targets first. What's the next mission?" };
-    setChatMessages([{ id: generateId(), from: "coach", text: P.greet, sub: P.sub, ts: Date.now() }]);
-  }, [state, loaded, homeMode, chatMessages.length]);
-
-  const addChatMsg = useCallback((from, text, data) => {
-    setChatMessages(prev => [...prev, { id: generateId(), from, text, data, ts: Date.now() }]);
-  }, []);
-
-  // Search existing tasks across all teams
-  const searchTasks = useCallback((query) => {
-    if (!state) return [];
-    const lower = query.toLowerCase().replace(/\b(tasks?|show|find|get|links?|status|info|details?|what|where|how)\b/g, "").trim();
-    if (!lower || lower.length < 2) return [];
-    const results = [];
-    const walk = (tasks, tk, sub, parentNames) => {
-      for (const t of tasks) {
-        const tLower = t.text.toLowerCase();
-        const path = [...parentNames, t.text];
-        // Score: exact match > starts with > contains
-        let score = 0;
-        if (tLower === lower) score = 100;
-        else if (tLower.startsWith(lower)) score = 80;
-        else if (tLower.includes(lower)) score = 60;
-        else if (lower.split(/\s+/).every(w => tLower.includes(w))) score = 40;
-        else if (lower.split(/\s+/).some(w => w.length > 2 && tLower.includes(w))) score = 20;
-        if (score > 0) results.push({ task: t, tk, sub, path, score, childCount: countAllTasks(t.children || []), childDone: countDoneTasks(t.children || []) });
-        if (t.children) walk(t.children, tk, sub, path);
+    const msgs = [];
+    const order = wknd ? ["defenders","midPlayers","attackers"] : ["attackers","midPlayers","defenders"];
+    const greetings = wknd
+      ? ["🛡️ WEEKEND. SHIELDS UP FIRST, SOLDIER.", "DEFENSE AND MAINTENANCE TAKE PRIORITY TODAY.", "ATTACKERS ARE ON STANDBY — EARN YOUR PLAYTIME."]
+      : ["⚔️ WEEKDAY. ATTACK MODE ENGAGED.", "STRIKE TARGETS FIRST, THEN MAINTAIN THE LINE.", "NO EXCUSES. EXECUTE."];
+    msgs.push(mkCoach(greetings[0]));
+    msgs.push(mkCoach(greetings[1]));
+    for (const tk of order) {
+      const fp = (state.fieldPlayers || {})[tk] || [];
+      const allSubs = state.subteams[tk] || [];
+      const subs = fp.length > 0 ? allSubs.filter(s => fp.includes(s.id)) : allSubs;
+      if (!subs.length) continue;
+      const label = tk === "attackers" ? "⚔️ ATTACKERS" : tk === "midPlayers" ? "⚡ MID PLAYERS" : "🛡️ DEFENDERS";
+      let total = 0, done = 0;
+      for (const sub of subs) {
+        if (tk === "attackers") {
+          const fIds = ((state.focusedTasks || {})[sub.id] || []);
+          const vis = fIds.length > 0 ? sub.tasks.filter(t => fIds.includes(t.id)) : sub.tasks;
+          total += countAllTasks(vis); done += countDoneTasks(vis);
+        } else {
+          total += sub.tasks.length; done += sub.tasks.filter(t => t.done).length;
+        }
       }
-    };
-    for (const tk of ["attackers","midPlayers","defenders"]) {
-      for (const sub of (state.subteams[tk] || [])) {
-        walk(sub.tasks, tk, sub, [sub.name]);
-      }
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      msgs.push(mkCoach(label + " — " + done + "/" + total + " COMPLETE (" + pct + "%)", { type: "team_summary", teamKey: tk }));
     }
-    return results.sort((a, b) => b.score - a.score).slice(0, 8);
-  }, [state]);
+    msgs.push(mkCoach("💰 CREDITS: ⚔️" + state.credits.attackers + " | ⚡" + state.credits.midPlayers + " | 🛡️" + state.credits.defenders));
+    msgs.push(mkCoach(greetings[2]));
+    msgs.push(mkCoach("TYPE A NEW TASK AND I'LL ROUTE IT, OR TAP BELOW TO INSPECT A TEAM. 👇", { type: "quick_actions" }));
+    setChatMessages(msgs);
+    setChatStep("idle");
+  }, [loaded, homeMode, state, chatMessages.length]);
 
-  const handleChatSend = useCallback(async () => {
-    if (!chatInput.trim() || !state) return;
+  const handleChatSubmit = useCallback(() => {
+    if (!chatInput.trim()) return;
     const text = chatInput.trim();
     setChatInput("");
-    addChatMsg("user", text);
-
-    // Step 0: Detect intent and search existing tasks
+    if (chatStep === "awaiting_confirm" && chatPendingTask) setChatPendingTask(null);
+    setChatMessages(prev => [...prev, mkUser(text)]);
     const lower = text.toLowerCase();
-    const wantStatus = /\b(status|done|progress|check|completed)\b/.test(lower);
-    const isExplicitAdd = /\b(add|create|new|make)\b/.test(lower);
-
-    if (!isExplicitAdd) {
-      const searchResults = searchTasks(text);
-      if (searchResults.length > 0 && searchResults[0].score >= 20) {
-        const wknd = isWeekend();
-        if (wantStatus) {
-          addChatMsg("coach", wknd ? "Status report:" : "STATUS REPORT:", { type: "search_status", results: searchResults });
-        } else {
-          addChatMsg("coach", wknd ? "Found these:" : "INTEL RETRIEVED:", { type: "search_links", results: searchResults });
-        }
-        return;
-      }
+    if (lower.match(/^(show|list|view)\s+(attacker|attack|mid|defender|defense)/)) {
+      const tk = lower.includes("attack") ? "attackers" : lower.includes("mid") ? "midPlayers" : "defenders";
+      const label = tk === "attackers" ? "⚔️ ATTACKERS" : tk === "midPlayers" ? "⚡ MID PLAYERS" : "🛡️ DEFENDERS";
+      setTimeout(() => setChatMessages(prev => [...prev, mkCoach(label + " — FULL ROSTER:", { type: "show_tasks", teamKey: tk })]), 200);
+      return;
     }
-
-    // Step 1: TF-IDF local classification (add mode)
-    const addText = isExplicitAdd ? text.replace(/\b(add|create|new|make)\s*/i, "").trim() || text : text;
-    const results = classifyTFIDF(addText, tfidfRef.current);
-    const top3 = results.slice(0, 3).filter(r => r.conf > 0.03);
-    const topConf = top3[0]?.conf || 0;
-
-    if (topConf > 0.25) {
-      setChatPending({ text: addText });
-      setTimeout(() => {
-        const wknd = isWeekend();
-        addChatMsg("coach", wknd ? "Found a match. Confirm below:" : "TARGET LOCKED. CONFIRM DESTINATION:", { type: "suggestions", items: top3, taskText: addText, source: "tfidf" });
-      }, 250);
+    const results = classifyNB(text, nbModelRef.current);
+    const top3 = results.slice(0, 3).filter(r => r.confidence > 0.05);
+    if (top3.length > 0) {
+      setChatSuggestions(top3);
+      setChatPendingTask({ text });
+      setChatStep("awaiting_confirm");
+      setTimeout(() => setChatMessages(prev => [...prev, mkCoach("🧠 NAIVE BAYES: " + top3.length + " MATCH" + (top3.length > 1 ? "ES" : "") + ":", { type: "suggestions", suggestions: top3, taskText: text })]), 300);
     } else {
-      setChatLoading(true);
-      setTimeout(async () => {
-        const claudeResult = await classifyClaude(addText, state.subteams);
-        setChatLoading(false);
-        if (claudeResult) {
-          setChatPending({ text: addText });
-          addChatMsg("coach", "🤖 AI-routed this one:", { type: "suggestions", items: [claudeResult], taskText: addText, source: "claude" });
-        } else if (top3.length > 0) {
-          setChatPending({ text: addText });
-          const wknd = isWeekend();
-          addChatMsg("coach", wknd ? "Not certain. Best guesses:" : "LOW CONFIDENCE. PICK MANUALLY:", { type: "suggestions", items: top3, taskText: addText, source: "tfidf-low" });
-        } else {
-          setChatPending({ text: addText });
-          const wknd = isWeekend();
-          addChatMsg("coach", wknd ? "Can't classify this one. Pick a team:" : "NO MATCH. ASSIGN MANUALLY:", { type: "manual", taskText: addText });
-        }
-      }, 100);
+      setChatPendingTask({ text });
+      setChatStep("awaiting_confirm");
+      setTimeout(() => setChatMessages(prev => [...prev, mkCoach("⚠️ LOW CONFIDENCE — PICK MANUALLY:", { type: "manual_pick", taskText: text })]), 300);
     }
-  }, [chatInput, state, addChatMsg, searchTasks]);
+  }, [chatInput, chatStep, chatPendingTask, state]);
 
-  const confirmChatRoute = useCallback((tk, sid, text) => {
-    if (!state) return;
-    addTask(tk, sid, text);
-    const sub = state.subteams[tk]?.find(s => s.id === sid);
-    const wknd = isWeekend();
-    addChatMsg("coach", (wknd ? "✅ Added" : "✅ DEPLOYED") + " → " + getTeamIcon(tk) + " " + (sub?.name || sid));
-    setChatPending(null);
-    setChatLoading(false);
-  }, [state, addTask, addChatMsg]);
+  const confirmTaskRoute = useCallback((teamKey, subId, text) => {
+    addTask(teamKey, subId, text);
+    const label = teamKey === "attackers" ? "⚔️ ATTACKERS" : teamKey === "midPlayers" ? "⚡ MID PLAYERS" : "🛡️ DEFENDERS";
+    const subName = state?.subteams?.[teamKey]?.find(s => s.id === subId)?.name || subId;
+    setChatMessages(prev => [...prev, mkCoach("✅ DEPLOYED \"" + text.toUpperCase() + "\" → " + label + " / " + subName + ". DONE.")]);
+    setChatPendingTask(null);
+    setChatSuggestions([]);
+    setChatStep("idle");
+  }, [addTask, state]);
+
+  const showTeamInChat = useCallback((tk) => {
+    const label = tk === "attackers" ? "⚔️ ATTACKERS" : tk === "midPlayers" ? "⚡ MID PLAYERS" : "🛡️ DEFENDERS";
+    setChatMessages(prev => [...prev, mkCoach(label + " — FULL ROSTER:", { type: "show_tasks", teamKey: tk })]);
+  }, []);
+
+  const getSubName = (tk, sid) => {
+    const sub = state?.subteams?.[tk]?.find(s => s.id === sid);
+    return sub ? sub.name : sid;
+  };
+  const chatTeamLabel = (tk) => tk === "attackers" ? "⚔️ ATTACKERS" : tk === "midPlayers" ? "⚡ MID PLAYERS" : tk === "defenders" ? "🛡️ DEFENDERS" : tk;
 
   if (!loaded || !state) return (
     <div style={{background:"#080B12",color:"#fff",height:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1097,6 +951,136 @@ function TeamTaskManager() {
     );
   };
 
+  /* ─── CHAT RENDERER ─── */
+  const renderChat = () => {
+    return (
+      <div style={{padding:16,maxWidth:620,margin:"0 auto"}}>
+        <div style={{textAlign:"center",padding:"20px 0"}}>
+          <div style={{fontSize:22,marginBottom:8}}>📋</div>
+          <div style={{fontFamily:P_ALL.coach.font,fontSize:14,color:TC("coach").base,letterSpacing:3}}>COACH BRIEFING</div>
+          <div style={{fontSize:9,color:T.textMut,letterSpacing:2,marginTop:4}}>
+            {isWeekend() ? "WEEKEND — DEFENSE FIRST" : "WEEKDAY — ATTACK FIRST"}
+          </div>
+        </div>
+        <div style={{marginBottom:12}}>
+          {chatMessages.map((msg, i) => (
+            <div key={msg.id || i} style={{
+              display:"flex", justifyContent:msg.from==="coach"?"flex-start":"flex-end",
+              marginBottom:8,
+            }}>
+              <div style={{
+                maxWidth:"88%", padding:"10px 14px",
+                borderRadius:msg.from==="coach"?"2px 14px 14px 14px":"14px 2px 14px 14px",
+                background:msg.from==="coach" ? T.cardBg : TC("coach").base+"20",
+                border:"1px solid " + (msg.from==="coach" ? T.border : TC("coach").base+"40"),
+              }}>
+                {msg.from==="coach" && <div style={{fontSize:7,fontFamily:P_ALL.coach.font,color:TC("coach").base,letterSpacing:2,marginBottom:4}}>COACH</div>}
+                <div style={{fontSize:12,color:T.text,lineHeight:1.5}}>{msg.content}</div>
+                {msg.data && msg.data.type === "team_summary" && msg.data.teamKey && state && state.subteams && state.subteams[msg.data.teamKey] && (
+                  <div style={{marginTop:6}}>
+                    {state.subteams[msg.data.teamKey].map(sub => {
+                      const col = TC(msg.data.teamKey).shades ? TC(msg.data.teamKey).shades[sub.color % TC(msg.data.teamKey).shades.length] : TC(msg.data.teamKey).base;
+                      const t2 = msg.data.teamKey==="attackers" ? countAllTasks(sub.tasks) : sub.tasks.length;
+                      const d2 = msg.data.teamKey==="attackers" ? countDoneTasks(sub.tasks) : sub.tasks.filter(x=>x.done).length;
+                      return (
+                        <div key={sub.id} style={{display:"flex",alignItems:"center",gap:6,padding:"2px 0"}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:col}} />
+                          <span style={{fontSize:10,color:col,flex:1}}>{sub.name}</span>
+                          <span style={{fontSize:9,color:T.textMut}}>{d2}/{t2}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {msg.data && msg.data.type === "quick_actions" && (
+                  <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:5}}>
+                    {["attackers","midPlayers","defenders"].map(tk => (
+                      <button key={tk} onClick={()=>showTeamInChat(tk)} style={{
+                        background:TC(tk).base+"15",border:"1.5px solid "+TC(tk).base+"40",
+                        color:TC(tk).base,padding:"6px 12px",borderRadius:14,
+                        cursor:"pointer",fontSize:9,fontWeight:600,letterSpacing:1,
+                      }}>SHOW {tk==="attackers"?"⚔️ ATK":tk==="midPlayers"?"⚡ MID":"🛡️ DEF"}</button>
+                    ))}
+                  </div>
+                )}
+                {msg.data && msg.data.type === "show_tasks" && msg.data.teamKey && state && state.subteams[msg.data.teamKey] && (
+                  <div style={{marginTop:6}}>
+                    {state.subteams[msg.data.teamKey].map(sub => (
+                      <div key={sub.id} style={{marginBottom:6}}>
+                        <div style={{fontSize:9,color:TC(msg.data.teamKey).base,letterSpacing:1,marginBottom:2}}>{sub.name}</div>
+                        {sub.tasks.length===0 ? <div style={{fontSize:9,color:T.textMut,paddingLeft:8}}>No tasks</div> :
+                          sub.tasks.map(t=>(
+                            <div key={t.id} style={{display:"flex",alignItems:"center",gap:6,padding:"2px 0",paddingLeft:4}}>
+                              <div onClick={()=>completeTask(msg.data.teamKey,sub.id,t.id)} style={{width:14,height:14,borderRadius:4,border:"2px solid "+(t.done?TC(msg.data.teamKey).base:T.chkOff),background:t.done?TC(msg.data.teamKey).base:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                {t.done&&<span style={{color:"#fff",fontSize:7}}>✓</span>}
+                              </div>
+                              <span style={{fontSize:11,color:T.text,opacity:t.done?0.3:1,textDecoration:t.done?"line-through":"none"}}>{t.text}</span>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {msg.data && msg.data.type === "suggestions" && msg.data.suggestions && (
+                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
+                    {msg.data.suggestions.map((s, si) => (
+                      <button key={si} onClick={()=>confirmTaskRoute(s.teamKey, s.subId, msg.data.taskText)} style={{
+                        display:"flex",alignItems:"center",gap:8,padding:"8px 12px",
+                        background:si===0?TC(s.teamKey).base+"20":T.surface,
+                        border:"1.5px solid "+(si===0?TC(s.teamKey).base:T.borderStr),
+                        borderRadius:8,cursor:"pointer",width:"100%",textAlign:"left",
+                      }}>
+                        <span style={{fontSize:10,fontWeight:700,color:TC(s.teamKey).base,minWidth:36}}>{Math.round(s.confidence*100)}%</span>
+                        <span style={{fontSize:10,color:T.text,flex:1}}>{chatTeamLabel(s.teamKey)} / {getSubName(s.teamKey, s.subId)}</span>
+                        {si===0 && <span style={{fontSize:7,color:TC(s.teamKey).base,letterSpacing:1}}>TOP</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {msg.data && msg.data.type === "manual_pick" && msg.data.taskText && (
+                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:3}}>
+                    {["attackers","midPlayers","defenders"].map(tk2 =>
+                      (state.subteams[tk2]||[]).map(sub => (
+                        <button key={sub.id} onClick={()=>confirmTaskRoute(tk2, sub.id, msg.data.taskText)} style={{
+                          display:"flex",alignItems:"center",gap:8,padding:"6px 10px",
+                          background:T.surface,border:"1px solid "+TC(tk2).base+"30",
+                          borderRadius:6,cursor:"pointer",width:"100%",textAlign:"left",
+                        }}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:TC(tk2).base}} />
+                          <span style={{fontSize:10,color:T.text}}>{sub.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{
+          display:"flex",gap:8,alignItems:"center",
+          padding:12,background:T.cardBg,
+          borderRadius:14,border:"1px solid "+T.border,
+          position:"sticky",bottom:60,
+        }}>
+          <input
+            style={{flex:1,border:"none",background:"transparent",fontSize:13,padding:"8px 4px",color:T.text,outline:"none"}}
+            placeholder="Type a task or command..."
+            value={chatInput}
+            onChange={e=>setChatInput(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter")handleChatSubmit();}}
+          />
+          <button onClick={handleChatSubmit} style={{
+            background:TC("coach").base,border:"none",color:"#fff",
+            padding:"8px 16px",borderRadius:10,cursor:"pointer",
+            fontSize:10,fontWeight:700,letterSpacing:2,
+          }}>SEND</button>
+        </div>
+      </div>
+    );
+  };
+
   /* ─── DASHBOARD ─── */
   const renderDash = () => {
     const wknd = isWeekend();
@@ -1137,10 +1121,10 @@ function TeamTaskManager() {
           const hasFocus = fp.length > 0;
           const focusedSubs = hasFocus ? state.subteams[tk].filter(s => fp.includes(s.id)) : state.subteams[tk];
           const allSubs = state.subteams[tk];
-          const total=focusedSubs.reduce((a,s)=>{const fIds=((state.focusedTasks||{})[s.id]||[]);const vis=fIds.length>0?s.tasks.filter(t=>fIds.includes(t.id)):s.tasks;return a+countAllTasks(vis);},0);
-          const done=focusedSubs.reduce((a,s)=>{const fIds=((state.focusedTasks||{})[s.id]||[]);const vis=fIds.length>0?s.tasks.filter(t=>fIds.includes(t.id)):s.tasks;return a+countDoneTasks(vis);},0);
-          const allTotal=allSubs.reduce((a,s)=>a+countAllTasks(s.tasks),0);
-          const allDone=allSubs.reduce((a,s)=>a+countDoneTasks(s.tasks),0);
+          const total=tk==="attackers"?focusedSubs.reduce((a,s)=>{const fIds=((state.focusedTasks||{})[s.id]||[]);const vis=fIds.length>0?s.tasks.filter(t=>fIds.includes(t.id)):s.tasks;return a+countAllTasks(vis);},0):focusedSubs.reduce((a,s)=>a+s.tasks.length,0);
+          const done=tk==="attackers"?focusedSubs.reduce((a,s)=>{const fIds=((state.focusedTasks||{})[s.id]||[]);const vis=fIds.length>0?s.tasks.filter(t=>fIds.includes(t.id)):s.tasks;return a+countDoneTasks(vis);},0):focusedSubs.reduce((a,s)=>a+s.tasks.filter(t=>t.done).length,0);
+          const allTotal=tk==="attackers"?allSubs.reduce((a,s)=>a+countAllTasks(s.tasks),0):allSubs.reduce((a,s)=>a+s.tasks.length,0);
+          const allDone=tk==="attackers"?allSubs.reduce((a,s)=>a+countDoneTasks(s.tasks),0):allSubs.reduce((a,s)=>a+s.tasks.filter(t=>t.done).length,0);
           return (<div key={tk} style={{background:C.card,borderRadius:P.cardRadius,border:`${P.borderWidth}px solid ${C.border}`,borderLeft:`${P.borderWidth+2}px solid ${C.base}`,padding:18,marginBottom:14,opacity:lk?0.3:1,transition:"all 0.3s",boxShadow:T.shadow}}>            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{flex:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
@@ -1158,11 +1142,11 @@ function TeamTaskManager() {
               <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:10}}>
                 {focusedSubs.map(sub => {
                   const shade = C.shades[sub.color % C.shades.length];
-                  const subFocusIds = (state.focusedTasks||{})[sub.id]||[];
-                  const hasSubFocus = subFocusIds.length > 0;
+                  const subFocusIds = tk === "attackers" ? ((state.focusedTasks||{})[sub.id]||[]) : [];
+                  const hasSubFocus = tk === "attackers" && subFocusIds.length > 0;
                   const visTasks = hasSubFocus ? sub.tasks.filter(t => subFocusIds.includes(t.id)) : sub.tasks;
-                  const subDone = countDoneTasks(visTasks);
-                  const subTotal = countAllTasks(visTasks);
+                  const subDone = tk === "attackers" ? countDoneTasks(visTasks) : sub.tasks.filter(t=>t.done).length;
+                  const subTotal = tk === "attackers" ? countAllTasks(visTasks) : sub.tasks.length;
                   return (
                     <div key={sub.id} style={{
                       display:"flex",alignItems:"center",gap:4,
@@ -1191,53 +1175,30 @@ function TeamTaskManager() {
               <div style={{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:10}}>
                 {focusedSubs.map(sub => {
                   const shade = C.shades[sub.color % C.shades.length];
-                  // Apply task-level focus filter for all teams
-                  const subFocusIds = (state.focusedTasks||{})[sub.id]||[];
-                  const hasTaskFocus = subFocusIds.length > 0;
+                  // For attackers, apply task-level focus filter
+                  const subFocusIds = tk === "attackers" ? ((state.focusedTasks||{})[sub.id]||[]) : [];
+                  const hasTaskFocus = tk === "attackers" && subFocusIds.length > 0;
                   const visibleTasks = hasTaskFocus ? sub.tasks.filter(t => subFocusIds.includes(t.id)) : sub.tasks;
-                  const subTaskCount = countAllTasks(visibleTasks);
+                  const subTaskCount = tk === "attackers" ? countAllTasks(visibleTasks) : visibleTasks.length;
                   if (subTaskCount === 0) return null;
 
-                  // Compact recursive renderer for dashboard (all teams)
+                  // Compact recursive renderer for dashboard
                   const renderDashTask = (task, depth = 0) => {
                     const hasKids = task.children?.length > 0;
                     const taskLinks = task.links || [];
                     const dColor = C.shades[(sub.color + depth) % C.shades.length];
                     const dTag = task.tagId ? (state.tags||[]).find(t=>t.id===task.tagId) : null;
-                    if (task.isSleepTracker) {
-                      return (
-                        <div key={task.id} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",paddingLeft:depth*16,flexWrap:"wrap"}}>
-                          <span style={{fontFamily:P.bodyFont,fontSize:12,opacity:task.done?0.35:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>
-                            {tk==="defenders"?"🔒":"🌙"} {task.text} {task.sleepHours?`(${task.sleepHours}H)`:""}
-                          </span>
-                          {!task.done?(
-                            <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                              <input type="number" placeholder="HRS" value={sleepHours} onChange={e=>setSleepHours(e.target.value)} style={{...inp(tk),width:50,padding:"4px 6px",textAlign:"center",fontSize:11}} min="0" max="24" step="0.5"/>
-                              <button style={{...btn(tk,shade),padding:"4px 10px",fontSize:9}} onClick={()=>{if(sleepHours){completeTask(tk,sub.id,task.id,sleepHours);setSleepHours("");}}}>{tk==="defenders"?"LOCK":"LOG"}</button>
-                            </div>
-                          ):(<button style={{...btn(tk,"transparent"),opacity:0.4,fontSize:8,color:T.textSec,padding:"2px 6px"}} onClick={()=>completeTask(tk,sub.id,task.id)}>UNDO</button>)}
-                        </div>
-                      );
-                    }
                     return (
                       <div key={task.id}>
                         <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 0",paddingLeft:depth*16}}>
                           {depth > 0 && <div style={{width:8,height:8,borderLeft:`1.5px solid ${dColor}40`,borderBottom:`1.5px solid ${dColor}40`,borderRadius:"0 0 0 3px",flexShrink:0,marginLeft:-6}} />}
-                          {hasKids && (
-                            <button onClick={(e)=>{e.stopPropagation();toggleCollapse(task.id);}} style={{
-                              background:"transparent",border:"none",cursor:"pointer",padding:0,
-                              fontSize:Math.max(7,10-depth),color:dColor,flexShrink:0,width:14,height:14,
-                              display:"flex",alignItems:"center",justifyContent:"center",opacity:0.6,
-                              transition:"transform 0.2s",transform:collapsedTasks.has(task.id)?"rotate(-90deg)":"rotate(0deg)",
-                            }}>▼</button>
-                          )}
                           <div onClick={()=>completeTask(tk,sub.id,task.id)} style={{
                             width:Math.max(14,18-depth*2),height:Math.max(14,18-depth*2),
                             borderRadius:P.checkRadius,border:`2px solid ${task.done?dColor:T.chkOff}`,
                             background:task.done?dColor:"transparent",cursor:"pointer",
                             display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
                           }}>
-                            {task.done&&<span style={{color:"#fff",fontSize:Math.max(7,9-depth),fontWeight:700}}>{tk==="attackers"?"✕":tk==="defenders"?"🔒":"✓"}</span>}
+                            {task.done&&<span style={{color:"#fff",fontSize:Math.max(7,9-depth),fontWeight:700}}>{tk==="attackers"?"✕":"✓"}</span>}
                           </div>
                           {dTag && <span style={{background:dTag.color+"20",color:dTag.color,padding:"0px 5px",borderRadius:8,fontSize:6,fontFamily:P_ALL.coach.font,fontWeight:700,letterSpacing:0.5,flexShrink:0}}>{dTag.name}</span>}
                           <span style={{fontFamily:P.bodyFont,fontSize:Math.max(10,12-depth),opacity:task.done?0.3:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{task.text}</span>
@@ -1256,7 +1217,7 @@ function TeamTaskManager() {
                             ))}
                           </div>
                         )}
-                        {hasKids && !collapsedTasks.has(task.id) && task.children.map(c => renderDashTask(c, depth+1))}
+                        {hasKids && task.children.map(c => renderDashTask(c, depth+1))}
                       </div>
                     );
                   };
@@ -1267,7 +1228,34 @@ function TeamTaskManager() {
                         <span style={{fontFamily:P.font,...P.labelStyle,fontSize:8,color:shade}}>{sub.name}</span>
                         {hasTaskFocus && <span style={{fontSize:7,color:TC("coach").base,fontFamily:P_ALL.coach.font,letterSpacing:1}}>🎯 {subFocusIds.length}/{sub.tasks.length}</span>}
                       </div>
-                      {visibleTasks.map(task => renderDashTask(task, 0))}
+                      {tk === "attackers" ? (
+                        visibleTasks.map(task => renderDashTask(task, 0))
+                      ) : (
+                        sub.tasks.map(task => (
+                        <div key={task.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0"}}>
+                          {task.isSleepTracker ? (
+                            <div style={{display:"flex",alignItems:"center",gap:6,flex:1,flexWrap:"wrap"}}>
+                              <span style={{fontFamily:P.bodyFont,fontSize:12,opacity:task.done?0.35:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>
+                                {tk==="defenders"?"🔒":"🌙"} {task.text} {task.sleepHours?`(${task.sleepHours}H)`:""}
+                              </span>
+                              {!task.done?(
+                                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                                  <input type="number" placeholder="HRS" value={sleepHours} onChange={e=>setSleepHours(e.target.value)} style={{...inp(tk),width:50,padding:"4px 6px",textAlign:"center",fontSize:11}} min="0" max="24" step="0.5"/>
+                                  <button style={{...btn(tk,shade),padding:"4px 10px",fontSize:9}} onClick={()=>{if(sleepHours){completeTask(tk,sub.id,task.id,sleepHours);setSleepHours("");}}}>{tk==="defenders"?"LOCK":"LOG"}</button>
+                                </div>
+                              ):(<button style={{...btn(tk,"transparent"),opacity:0.4,fontSize:8,color:T.textSec,padding:"2px 6px"}} onClick={()=>completeTask(tk,sub.id,task.id)}>UNDO</button>)}
+                            </div>
+                          ) : (
+                            <>
+                              <div onClick={()=>completeTask(tk,sub.id,task.id)} style={{width:18,height:18,borderRadius:P.checkRadius,border:`2px solid ${task.done?shade:T.chkOff}`,background:task.done?shade:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                {task.done&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>{tk==="defenders"?"🔒":"✓"}</span>}
+                              </div>
+                              <span style={{fontFamily:P.bodyFont,fontSize:12,opacity:task.done?0.3:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{task.text}</span>
+                            </>
+                          )}
+                        </div>
+                        ))
+                      )}
                     </div>
                   );
                 })}
@@ -1309,8 +1297,8 @@ function TeamTaskManager() {
         </div>
         {state.subteams[tk].map(sub => {
           const shade=C.shades[sub.color%C.shades.length];
-          const taskTotal = countAllTasks(sub.tasks);
-          const taskDone = countDoneTasks(sub.tasks);
+          const taskTotal = tk === "attackers" ? countAllTasks(sub.tasks) : sub.tasks.length;
+          const taskDone = tk === "attackers" ? countDoneTasks(sub.tasks) : sub.tasks.filter(t=>t.done).length;
 
           // Recursive attacker task renderer
           const renderAttackerTask = (task, depth = 0) => {
@@ -1324,21 +1312,6 @@ function TeamTaskManager() {
             const isAddingLink = addLinkTo?.subId===sub.id && addLinkTo?.taskId===task.id;
             const isPickingTag = tagPicker?.subId===sub.id && tagPicker?.taskId===task.id;
             const taskTag = task.tagId ? (state.tags||[]).find(t=>t.id===task.tagId) : null;
-            const checkSymbol = tk==="attackers"?"✕":tk==="defenders"?"🔒":"✓";
-            // Sleep tracker special case
-            if (task.isSleepTracker) {
-              return (
-                <div key={task.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",paddingLeft:depth*20,borderBottom:`1px solid ${T.border}`,flexWrap:"wrap"}}>
-                  <span style={{fontFamily:P.bodyFont,...P.taskStyle,opacity:task.done?0.35:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{tk==="defenders"?"🔒":"🌙"} {task.text} {task.sleepHours?`(${task.sleepHours}H)`:""}</span>
-                  {!task.done?(
-                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                      <input type="number" placeholder="HRS" value={sleepHours} onChange={e=>setSleepHours(e.target.value)} style={{...inp(tk),width:55,padding:"5px 8px",textAlign:"center"}} min="0" max="24" step="0.5"/>
-                      <button style={btn(tk,shade)} onClick={()=>{if(sleepHours){completeTask(tk,sub.id,task.id,sleepHours);setSleepHours("");}}}>{tk==="defenders"?"LOCK":"LOG"}</button>
-                    </div>
-                  ):(<button style={{...btn(tk,"transparent"),opacity:0.4,fontSize:9,color:T.textSec}} onClick={()=>completeTask(tk,sub.id,task.id)}>UNDO</button>)}
-                </div>
-              );
-            }
             return (
               <div key={task.id}>
                 <div style={{
@@ -1349,21 +1322,13 @@ function TeamTaskManager() {
                   {depth > 0 && (
                     <div style={{width:12,height:12,borderLeft:`2px solid ${dColor}40`,borderBottom:`2px solid ${dColor}40`,borderRadius:"0 0 0 4px",flexShrink:0,marginLeft:-10}} />
                   )}
-                  {hasChildren && (
-                    <button onClick={(e)=>{e.stopPropagation();toggleCollapse(task.id);}} style={{
-                      background:"transparent",border:"none",cursor:"pointer",padding:0,
-                      fontSize:Math.max(8,12-depth),color:dColor,flexShrink:0,width:16,height:16,
-                      display:"flex",alignItems:"center",justifyContent:"center",opacity:0.7,
-                      transition:"transform 0.2s",transform:collapsedTasks.has(task.id)?"rotate(-90deg)":"rotate(0deg)",
-                    }} title={collapsedTasks.has(task.id)?"Expand":"Collapse"}>▼</button>
-                  )}
                   <div onClick={()=>completeTask(tk,sub.id,task.id)} style={{
                     width: Math.max(16, 22 - depth*2), height: Math.max(16, 22 - depth*2),
                     borderRadius:P.checkRadius, border:`2px solid ${task.done?dColor:T.chkOff}`,
                     background:task.done?dColor:"transparent", cursor:"pointer",
                     display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
                   }}>
-                    {task.done&&<span style={{color:"#fff",fontSize:Math.max(8,11-depth),fontWeight:700}}>{checkSymbol}</span>}
+                    {task.done&&<span style={{color:"#fff",fontSize:Math.max(8,11-depth),fontWeight:700}}>✕</span>}
                   </div>
                   {/* Tag pill */}
                   {taskTag && (
@@ -1487,7 +1452,7 @@ function TeamTaskManager() {
                     <button style={{background:"transparent",border:"none",color:T.textSec,cursor:"pointer",fontSize:14,fontWeight:700}} onClick={()=>{setAddSubTo(null);setSubTaskText("");}}>✕</button>
                   </div>
                 )}
-                {hasChildren && !collapsedTasks.has(task.id) && task.children.map(child => renderAttackerTask(child, depth + 1))}
+                {hasChildren && task.children.map(child => renderAttackerTask(child, depth + 1))}
               </div>
             );
           };
@@ -1496,11 +1461,9 @@ function TeamTaskManager() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <span style={{fontFamily:P.font,...P.titleStyle,fontSize:13,color:shade}}>{sub.name}</span>
               <span style={{background:shade+(themeMode==="light"?"12":"18"),color:shade,padding:"3px 10px",borderRadius:P.btnStyle.borderRadius,fontSize:10,fontFamily:P.bodyFont,fontWeight:600}}>{taskDone}/{taskTotal}</span>
-              <button onClick={()=>collapseAll(sub.tasks)} title="Collapse all" style={{background:"transparent",border:`1px solid ${shade}30`,color:shade,cursor:"pointer",fontSize:9,padding:"2px 6px",borderRadius:4,opacity:0.6}}>▲</button>
-              <button onClick={()=>expandAll(sub.tasks)} title="Expand all" style={{background:"transparent",border:`1px solid ${shade}30`,color:shade,cursor:"pointer",fontSize:9,padding:"2px 6px",borderRadius:4,opacity:0.6}}>▼</button>
             </div>
-            {/* Focus filter pills — all teams */}
-            {sub.tasks.length > 0 && (
+            {/* Focus filter pills — attackers only */}
+            {tk === "attackers" && sub.tasks.length > 0 && (
               <div style={{marginBottom:12,padding:10,background:T.surface,borderRadius:6,border:`1px solid ${T.border}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <span style={{fontFamily:P.font,...P.labelStyle,fontSize:8,color:T.textMut,letterSpacing:2}}>🎯 FOCUS TARGETS — HOME PRIORITY</span>
@@ -1555,8 +1518,33 @@ function TeamTaskManager() {
                 )}
               </div>
             )}
-            {/* Recursive task rendering for all teams */}
-            {sub.tasks.map(task => renderAttackerTask(task, 0))}
+            {/* Task rendering: recursive for attackers, flat for others */}
+            {tk === "attackers" ? (
+              sub.tasks.map(task => renderAttackerTask(task, 0))
+            ) : (
+              sub.tasks.map(task => (
+              <div key={task.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
+                {task.isSleepTracker?(
+                  <div style={{display:"flex",alignItems:"center",gap:8,flex:1,flexWrap:"wrap"}}>
+                    <span style={{fontFamily:P.bodyFont,...P.taskStyle,opacity:task.done?0.35:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{tk==="defenders"?"🔒":"🌙"} {task.text} {task.sleepHours?`(${task.sleepHours}H)`:""}</span>
+                    {!task.done?(<div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <input type="number" placeholder="HRS" value={sleepHours} onChange={e=>setSleepHours(e.target.value)} style={{...inp(tk),width:55,padding:"5px 8px",textAlign:"center"}} min="0" max="24" step="0.5"/>
+                      <button style={btn(tk,shade)} onClick={()=>{if(sleepHours){completeTask(tk,sub.id,task.id,sleepHours);setSleepHours("");}}}>{tk==="defenders"?"LOCK":"LOG"}</button>
+                    </div>):(<button style={{...btn(tk,"transparent"),opacity:0.4,fontSize:9,color:T.textSec}} onClick={()=>completeTask(tk,sub.id,task.id)}>UNDO</button>)}
+                  </div>
+                ):(
+                  <>
+                    <div onClick={()=>completeTask(tk,sub.id,task.id)} style={{width:22,height:22,borderRadius:P.checkRadius,border:`2px solid ${task.done?shade:T.chkOff}`,background:task.done?shade:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {task.done&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>{tk==="defenders"?"🔒":"✓"}</span>}
+                    </div>
+                    <span style={{fontFamily:P.bodyFont,...P.taskStyle,opacity:task.done?0.3:1,color:T.text,textDecoration:task.done?"line-through":"none",flex:1}}>{task.text}</span>
+                    {task.recurring&&<span style={{fontFamily:P.bodyFont,...P.labelStyle,fontSize:8,color:T.textMut}}>{tk==="attackers"?"REPEAT":"DAILY"}</span>}
+                    <button onClick={()=>removeTask(tk,sub.id,task.id)} style={{background:"transparent",border:"none",color:T.rmBtn,cursor:"pointer",fontSize:16,padding:"0 4px"}}>×</button>
+                  </>
+                )}
+              </div>
+              ))
+            )}
             {showAddTask===sub.id?(
               <div style={{marginTop:10,display:"flex",gap:8,alignItems:"center"}}>
                 <input style={{...inp(tk),flex:1}} placeholder={tk==="defenders"?"NEW PROTOCOL...":tk==="attackers"?"NEW TARGET...":"New task..."} value={newTaskText} onChange={e=>setNewTaskText(e.target.value)} autoFocus onKeyDown={e=>{if(e.key==="Enter"&&newTaskText.trim()){addTask(tk,sub.id,newTaskText.trim());setNewTaskText("");setShowAddTask(false);}}}/>
@@ -1568,8 +1556,7 @@ function TeamTaskManager() {
               <button style={{background:"transparent",border:`1px dashed ${shade}${themeMode==="light"?"35":"25"}`,color:shade,padding:8,cursor:"pointer",width:"100%",marginTop:10,fontFamily:P.font,...P.btnStyle}} onClick={()=>{setShowAddTask(sub.id);setNewTaskText("");}}>
                 + {tk==="defenders"?"ADD PROTOCOL":tk==="attackers"?"ADD TARGET":"ADD TASK"}</button>
             )}
-            {/* Quick links — all teams */}
-            <div style={{marginTop:12}}>
+            {tk==="attackers"&&(<div style={{marginTop:12}}>
               <div style={{fontFamily:P.font,...P.labelStyle,color:T.textMut,marginBottom:8}}>QUICK LINKS</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {(sub.links||[]).map((link,li)=>(<a key={li} href={link.url} target="_blank" rel="noopener noreferrer" style={{background:shade+(themeMode==="light"?"10":"12"),border:`2px solid ${shade}${themeMode==="light"?"20":"25"}`,color:shade,padding:"5px 12px",borderRadius:P.btnStyle.borderRadius,fontSize:10,textDecoration:"none",fontFamily:P.font,letterSpacing:2}}>⚡ {link.title}</a>))}
@@ -1578,11 +1565,11 @@ function TeamTaskManager() {
                 <div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
                   <input style={{...inp(tk),flex:1,minWidth:80}} placeholder="TITLE" value={newLinkTitle} onChange={e=>setNewLinkTitle(e.target.value)} autoFocus/>
                   <input style={{...inp(tk),flex:2,minWidth:120}} placeholder="URL" value={newLinkUrl} onChange={e=>setNewLinkUrl(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newLinkTitle.trim()&&newLinkUrl.trim()){addLink(sub.id,newLinkTitle.trim(),newLinkUrl.trim());setNewLinkTitle("");setNewLinkUrl("");setShowAddLink(false);}}}/>
-                  <button style={btn(tk,shade)} onClick={()=>{if(newLinkTitle.trim()&&newLinkUrl.trim()){addLink(sub.id,newLinkTitle.trim(),newLinkUrl.trim());setNewLinkTitle("");setNewLinkUrl("");setShowAddLink(false);}}}>{tk==="attackers"?"DEPLOY":"ADD"}</button>
+                  <button style={btn(tk,shade)} onClick={()=>{if(newLinkTitle.trim()&&newLinkUrl.trim()){addLink(sub.id,newLinkTitle.trim(),newLinkUrl.trim());setNewLinkTitle("");setNewLinkUrl("");setShowAddLink(false);}}}>DEPLOY</button>
                   <button style={{...btn(tk,"transparent"),color:T.textSec}} onClick={()=>setShowAddLink(false)}>✕</button>
                 </div>
               ):(<button style={{background:"transparent",border:"none",color:shade,cursor:"pointer",fontSize:10,fontFamily:P.font,marginTop:6,opacity:0.5,letterSpacing:2,padding:0}} onClick={()=>{setShowAddLink(sub.id);setNewLinkTitle("");setNewLinkUrl("");}}>+ ADD LINK</button>)}
-            </div>
+            </div>)}
           </div>);
         })}
       </div>
@@ -1695,16 +1682,7 @@ function TeamTaskManager() {
         {/* TAG MANAGEMENT */}
         <div style={{background:T.cardBg,borderRadius:P.cardRadius,padding:14,marginBottom:14,border:`1px solid ${T.border}`,boxShadow:T.shadow}}>
           <div style={{...P.labelStyle,color:T.textMut,marginBottom:12}}>🏷️ AUTO-TAG RULES [{(state.tags||[]).length}]</div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <span style={{fontSize:9,color:T.textSec,letterSpacing:0.5}}>TAGS AUTO-ASSIGN WHEN TASK TEXT MATCHES KEYWORDS. CLICK A TAG TO EDIT.</span>
-            <button onClick={()=>{autoTagAll();}} style={{
-              background:`linear-gradient(135deg, ${TC("coach").base}, ${TC("attackers").base})`,
-              border:"none",color:"#fff",padding:"6px 14px",borderRadius:6,
-              cursor:"pointer",fontSize:10,fontWeight:700,letterSpacing:1,
-              fontFamily:P_ALL.coach.font,whiteSpace:"nowrap",
-              boxShadow:"0 2px 8px rgba(0,0,0,0.2)",
-            }}>⚡ AUTO-TAG ALL</button>
-          </div>
+          <div style={{fontSize:9,color:T.textSec,marginBottom:12,letterSpacing:0.5}}>TAGS AUTO-ASSIGN WHEN TASK TEXT MATCHES KEYWORDS. CLICK A TAG TO EDIT.</div>
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {(state.tags||[]).map(tag => {
               const isEditing = editingTag === tag.id;
@@ -1794,229 +1772,29 @@ function TeamTaskManager() {
     </div>
   );
 
-  /* ─── CHAT RENDERER ─── */
-  const renderChat = () => {
-    const wknd = isWeekend();
-    const P = P_ALL.coach;
-    return (
-      <div style={{padding:16,maxWidth:620,margin:"0 auto",display:"flex",flexDirection:"column",minHeight:"calc(100vh - 60px)"}}>
-        {/* Messages */}
-        <div style={{flex:1,overflowY:"auto",paddingBottom:80}}>
-          {chatMessages.map((msg) => {
-            const isCoach = msg.from === "coach";
-            const d = msg.data || {};
-            return (
-              <div key={msg.id} style={{display:"flex",justifyContent:isCoach?"flex-start":"flex-end",marginBottom:8}}>
-                <div style={{
-                  maxWidth:"88%",padding:"10px 14px",
-                  borderRadius:isCoach?"3px 14px 14px 14px":"14px 3px 14px 14px",
-                  background:isCoach?T.cardBg:TC("coach").base+"15",
-                  border:"1px solid "+(isCoach?T.border:TC("coach").base+"30"),
-                }}>
-                  {isCoach && <div style={{fontSize:7,fontFamily:P.font,color:TC("coach").base,letterSpacing:2,marginBottom:4,opacity:0.7}}>COACH</div>}
-                  <div style={{fontSize:12,color:isCoach?T.text:TC("coach").base,lineHeight:1.6,fontFamily:P.bodyFont}}>
-                    {msg.text}
-                  </div>
-                  {msg.sub && <div style={{fontSize:10,color:T.textMut,marginTop:4,fontFamily:P.bodyFont}}>{msg.sub}</div>}
-
-                  {/* TF-IDF / Claude suggestions */}
-                  {d.type === "suggestions" && d.items && (
-                    <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:5}}>
-                      {d.source && <div style={{fontSize:7,letterSpacing:2,color:T.textMut,fontFamily:P.font,marginBottom:2}}>
-                        {d.source === "claude" ? "🤖 CLAUDE AI" : d.source === "tfidf-low" ? "📊 TF-IDF (LOW)" : "📊 TF-IDF"}
-                      </div>}
-                      {d.items.map((s, i) => {
-                        const teamCol = TC(s.tk)?.base || "#888";
-                        const conf = Math.round((s.conf || 0) * 100);
-                        const sub = state.subteams[s.tk]?.find(x => x.id === s.sid);
-                        return (
-                          <button key={i} onClick={() => confirmChatRoute(s.tk, s.sid, d.taskText)} style={{
-                            display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
-                            background:i===0?teamCol+"12":"transparent",
-                            border:"1.5px solid "+(i===0?teamCol+"40":T.border),
-                            borderRadius:10,cursor:"pointer",width:"100%",textAlign:"left",
-                            transition:"all 0.15s",
-                          }}>
-                            {/* Circular confidence */}
-                            <div style={{position:"relative",width:34,height:34,flexShrink:0}}>
-                              <svg width="34" height="34" viewBox="0 0 34 34">
-                                <circle cx="17" cy="17" r="14" fill="none" stroke={teamCol+"20"} strokeWidth="2.5" />
-                                <circle cx="17" cy="17" r="14" fill="none" stroke={teamCol} strokeWidth="2.5"
-                                  strokeDasharray={87.96} strokeDashoffset={87.96*(1-conf/100)}
-                                  strokeLinecap="round" transform="rotate(-90 17 17)"
-                                  style={{transition:"stroke-dashoffset 0.5s ease"}} />
-                              </svg>
-                              <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:teamCol,fontFamily:P.font}}>{conf}</div>
-                            </div>
-                            <div style={{flex:1}}>
-                              <div style={{fontSize:11,color:T.text,fontWeight:600}}>{getTeamIcon(s.tk)} {sub?.name || s.sid}</div>
-                              <div style={{fontSize:8,color:T.textMut,letterSpacing:1,marginTop:1}}>{getTeamLabel(s.tk)}</div>
-                            </div>
-                            {i===0 && <div style={{fontSize:7,fontWeight:700,letterSpacing:2,color:teamCol,background:teamCol+"12",padding:"3px 8px",borderRadius:20,fontFamily:P.font}}>BEST</div>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Manual pick */}
-                  {d.type === "manual" && (
-                    <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:4}}>
-                      {["attackers","midPlayers","defenders"].map(tk =>
-                        (state.subteams[tk]||[]).map(sub => (
-                          <button key={sub.id} onClick={() => confirmChatRoute(tk, sub.id, d.taskText)} style={{
-                            display:"flex",alignItems:"center",gap:8,padding:"8px 12px",
-                            background:"transparent",border:"1px solid "+T.border,
-                            borderRadius:8,cursor:"pointer",width:"100%",textAlign:"left",
-                            transition:"all 0.15s",
-                          }}>
-                            <div style={{width:10,height:10,borderRadius:"50%",background:TC(tk).base}} />
-                            <span style={{fontSize:11,color:T.text}}>{sub.name}</span>
-                            <span style={{fontSize:8,color:TC(tk).base,letterSpacing:1,marginLeft:"auto",fontFamily:P.font}}>{getTeamLabel(tk)}</span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-
-                  {/* Search results — links mode */}
-                  {d.type === "search_links" && d.results && (
-                    <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
-                      {d.results.map((r, i) => {
-                        const C = TC(r.tk);
-                        const shade = C.shades ? C.shades[r.sub.color % C.shades.length] : C.base;
-                        const taskLinks = r.task.links || [];
-                        const childLinks = [];
-                        const collectLinks = (tasks) => tasks.forEach(t => { (t.links||[]).forEach(l => childLinks.push({...l, from: t.text})); if (t.children) collectLinks(t.children); });
-                        if (r.task.children) collectLinks(r.task.children);
-                        const allLinks = [...taskLinks.map(l => ({...l, from: r.task.text})), ...childLinks];
-                        return (
-                          <div key={i} style={{background:shade+"08",border:`1.5px solid ${shade}25`,borderLeft:`3px solid ${shade}`,borderRadius:8,padding:10}}>
-                            <div style={{fontSize:11,fontWeight:700,color:T.text,marginBottom:6}}>{r.task.text}</div>
-                            {allLinks.length > 0 ? (
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                                {allLinks.map((link, li) => (
-                                  <a key={li} href={link.url} target="_blank" rel="noopener noreferrer" style={{
-                                    background:shade+"12",border:`1px solid ${shade}30`,
-                                    color:shade,padding:"4px 10px",borderRadius:12,
-                                    fontSize:9,textDecoration:"none",fontFamily:P_ALL.coach.font,
-                                    display:"flex",alignItems:"center",gap:4,
-                                  }}>
-                                    <span style={{fontSize:8}}>⚡</span> {link.title}
-                                    {link.from !== r.task.text && <span style={{fontSize:7,opacity:0.6}}>({link.from})</span>}
-                                  </a>
-                                ))}
-                              </div>
-                            ) : (
-                              <div style={{fontSize:9,color:T.textMut,opacity:0.5,fontStyle:"italic"}}>No links attached</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Search results — status mode */}
-                  {d.type === "search_status" && d.results && (
-                    <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
-                      {d.results.map((r, i) => {
-                        const C = TC(r.tk);
-                        const shade = C.shades ? C.shades[r.sub.color % C.shades.length] : C.base;
-                        const pct = r.childCount > 0 ? Math.round(r.childDone / r.childCount * 100) : (r.task.done ? 100 : 0);
-                        return (
-                          <div key={i} style={{background:shade+"08",border:`1.5px solid ${shade}25`,borderLeft:`3px solid ${shade}`,borderRadius:8,padding:10}}>
-                            <div style={{display:"flex",alignItems:"center",gap:8}}>
-                              <div style={{position:"relative",width:30,height:30,flexShrink:0}}>
-                                <svg width="30" height="30" viewBox="0 0 30 30">
-                                  <circle cx="15" cy="15" r="12" fill="none" stroke={shade+"20"} strokeWidth="2.5" />
-                                  <circle cx="15" cy="15" r="12" fill="none" stroke={pct===100?"#22c55e":shade} strokeWidth="2.5"
-                                    strokeDasharray={75.4} strokeDashoffset={75.4*(1-pct/100)}
-                                    strokeLinecap="round" transform="rotate(-90 15 15)" />
-                                </svg>
-                                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:pct===100?"#22c55e":shade}}>{pct}%</div>
-                              </div>
-                              <div style={{flex:1}}>
-                                <div style={{fontSize:11,fontWeight:700,color:T.text}}>{r.task.text}</div>
-                              </div>
-                              <span style={{fontSize:9,fontWeight:700,color:pct===100?"#22c55e":r.task.done?"#22c55e":shade,fontFamily:P_ALL.coach.font}}>
-                                {r.task.done ? "✅ DONE" : r.childCount > 0 ? `${r.childDone}/${r.childCount}` : "⏳ PENDING"}
-                              </span>
-                            </div>
-                            {r.childCount > 0 && (
-                              <div style={{background:shade+"10",borderRadius:4,height:4,overflow:"hidden",marginTop:6}}>
-                                <div style={{height:"100%",background:pct===100?"#22c55e":shade,width:`${pct}%`,borderRadius:4,transition:"width 0.3s"}} />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {chatLoading && (
-            <div style={{display:"flex",justifyContent:"flex-start",marginBottom:8}}>
-              <div style={{padding:"10px 14px",borderRadius:"3px 14px 14px 14px",background:T.cardBg,border:"1px solid "+T.border}}>
-                <div style={{fontSize:7,fontFamily:P.font,color:TC("coach").base,letterSpacing:2,marginBottom:4,opacity:0.7}}>COACH</div>
-                <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                  <div style={{width:6,height:6,borderRadius:"50%",background:TC("coach").base,opacity:0.4,animation:"pulse 1s infinite"}} />
-                  <div style={{width:6,height:6,borderRadius:"50%",background:TC("coach").base,opacity:0.4,animation:"pulse 1s infinite 0.2s"}} />
-                  <div style={{width:6,height:6,borderRadius:"50%",background:TC("coach").base,opacity:0.4,animation:"pulse 1s infinite 0.4s"}} />
-                  <span style={{fontSize:9,color:T.textMut,marginLeft:6,fontFamily:P.font,letterSpacing:1}}>ASKING CLAUDE...</span>
-                </div>
-              </div>
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
-
-        {/* Input bar - sticky bottom */}
-        <div style={{
-          position:"fixed",bottom:0,left:0,right:0,
-          padding:"12px 16px 16px",
-          background:T.bg,borderTop:"1px solid "+T.border,
-          maxWidth:620,margin:"0 auto",
-        }}>
-          <div style={{display:"flex",gap:8,alignItems:"center",padding:"4px 4px 4px 14px",background:T.cardBg,borderRadius:14,border:"1px solid "+T.border}}>
-            <input
-              ref={chatInputRef}
-              style={{flex:1,border:"none",background:"transparent",fontSize:13,padding:"10px 0",color:T.text,outline:"none",fontFamily:P.bodyFont}}
-              placeholder={wknd?"What needs doing?":"ENTER TARGET..."}
-              value={chatInput}
-              onChange={e=>setChatInput(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter")handleChatSend();}}
-            />
-            <button onClick={handleChatSend} style={{
-              background:TC("coach").base,border:"none",color:"#fff",
-              padding:"10px 18px",borderRadius:10,cursor:"pointer",
-              fontSize:10,fontWeight:700,letterSpacing:2,fontFamily:P.font,
-              opacity:chatInput.trim()?1:0.4,transition:"all 0.15s",
-            }}>{wknd?"SEND":"FIRE"}</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div style={{background:T.bg,color:T.text,minHeight:"100vh",transition:"background 0.4s,color 0.4s"}}>
-      <style>{FONTS_CSS}{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}textarea{font-family:inherit}input[type=number]::-webkit-inner-spin-button{opacity:0.3}a:hover{opacity:0.8}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+      <style>{FONTS_CSS}{`*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}textarea{font-family:inherit}input[type=number]::-webkit-inner-spin-button{opacity:0.3}a:hover{opacity:0.8}`}</style>
       <div style={{background:T.topBar,borderBottom:`1px solid ${T.border}`,padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100,backdropFilter:"blur(20px)"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>{setView("dashboard");setSelectedTeam(null);}}>
           <span style={{fontSize:20}}>⚽</span>
           <span style={{fontFamily:P_ALL.coach.font,fontSize:14,fontWeight:700,letterSpacing:3,color:T.text}}>SQUAD</span>
         </div>
         <div style={{display:"flex",gap:4,alignItems:"center"}}>
-          <button onClick={()=>{setView("dashboard");setSelectedTeam(null);setHomeMode("dashboard");}} style={{background:view==="dashboard"&&homeMode==="dashboard"?T.navAct:"transparent",border:`1px solid ${view==="dashboard"&&homeMode==="dashboard"?T.borderStr:"transparent"}`,color:view==="dashboard"&&homeMode==="dashboard"?T.navActTxt:T.navTxt,padding:"5px 10px",borderRadius:6,cursor:"pointer",fontFamily:P_ALL.coach.font,fontSize:10,letterSpacing:2}}>HOME</button>
-          <button onClick={()=>{setView("dashboard");setSelectedTeam(null);setHomeMode(homeMode==="chat"?"dashboard":"chat");if(homeMode!=="chat"){setChatMessages([]);}}} style={{background:homeMode==="chat"&&view==="dashboard"?TC("coach").base+"20":"transparent",border:`1px solid ${homeMode==="chat"&&view==="dashboard"?TC("coach").base+"40":"transparent"}`,color:homeMode==="chat"&&view==="dashboard"?TC("coach").base:T.navTxt,padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:12}} title="Chat Mode">💬</button>
+          <button onClick={()=>{setView("dashboard");setSelectedTeam(null);}} style={{background:view==="dashboard"?T.navAct:"transparent",border:`1px solid ${view==="dashboard"?T.borderStr:"transparent"}`,color:view==="dashboard"?T.navActTxt:T.navTxt,padding:"5px 10px",borderRadius:6,cursor:"pointer",fontFamily:P_ALL.coach.font,fontSize:10,letterSpacing:2}}>HOME</button>
+          {view==="dashboard" && (
+            <button onClick={()=>{setHomeMode(homeMode==="chat"?"dashboard":"chat");setChatMessages([]);setChatStep(null);}} style={{
+              background:homeMode==="chat"?TC("coach").base+"20":"transparent",
+              border:`1px solid ${homeMode==="chat"?TC("coach").base+"50":"transparent"}`,
+              color:homeMode==="chat"?TC("coach").base:T.navTxt,
+              padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:12,
+            }} title={homeMode==="chat"?"Switch to Dashboard":"Switch to Chat"}>{homeMode==="chat"?"💬":"📊"}</button>
+          )}
           {["attackers","midPlayers","defenders"].map(tk=>(<button key={tk} onClick={()=>{setView("team");setSelectedTeam(tk);}} style={{background:(view==="team"&&selectedTeam===tk)?TC(tk).lighter:"transparent",border:`1px solid ${(view==="team"&&selectedTeam===tk)?TC(tk).border:"transparent"}`,color:(view==="team"&&selectedTeam===tk)?TC(tk).base:T.navTxt,padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:14}}>{getTeamIcon(tk)}</button>))}
           <button onClick={()=>setView("coach")} style={{background:view==="coach"?TC("coach").lighter:"transparent",border:`1px solid ${view==="coach"?TC("coach").border:"transparent"}`,color:view==="coach"?TC("coach").base:T.navTxt,padding:"5px 8px",borderRadius:6,cursor:"pointer",fontSize:14}}>📋</button>
         </div>
       </div>
-      {view==="dashboard"&&homeMode==="chat"&&renderChat()}
-      {view==="dashboard"&&homeMode!=="chat"&&renderDash()}
+      {view==="dashboard"&&(homeMode==="chat"?renderChat():renderDash())}
       {view==="team"&&renderTeam()}
       {view==="coach"&&renderCoach()}
       {showCoachSession&&renderModal()}
@@ -2024,9 +1802,7 @@ function TeamTaskManager() {
   );
 }
 
-
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(TeamTaskManager));
-</script>
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(TeamTaskManager));
+  </script>
 </body>
 </html>
