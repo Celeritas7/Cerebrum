@@ -7,7 +7,8 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+  html, body, #root { height: 100%; width: 100%; }
+  body { overflow-y: auto; overflow-x: hidden; }
   body { font-family: sans-serif; -webkit-font-smoothing: antialiased; }
   @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
   ::-webkit-scrollbar { width: 4px; }
