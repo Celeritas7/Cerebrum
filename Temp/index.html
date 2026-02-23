@@ -602,19 +602,11 @@ function TeamTaskManager() {
     }
     return { ...p, subteams: ns };
   }), []);
-  const removeTask = useCallback((tk, sid, tid) => {
-    // Find task name for confirmation
-    const findName = (tasks) => { for (const t of tasks) { if (t.id === tid) return t.text; if (t.children) { const r = findName(t.children); if (r) return r; } } return null; };
-    const name = (state?.subteams[tk]||[]).reduce((found, sub) => found || findName(sub.tasks), null) || "this task";
-    const childCount = (() => { const findT = (tasks) => { for (const t of tasks) { if (t.id === tid) return countAllTasks(t.children||[]); if (t.children) { const r = findT(t.children); if (r >= 0) return r; } } return -1; }; return (state?.subteams[tk]||[]).reduce((c, sub) => c >= 0 ? c : findT(sub.tasks), -1); })();
-    const msg = childCount > 0 ? `Delete "${name}" and its ${childCount} sub-task${childCount>1?"s":""}?\n\nThis is permanent.` : `Delete "${name}"?\n\nThis is permanent.`;
-    if (!confirm(msg)) return;
-    setState(p => {
-      const ns = {...p.subteams};
-      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: removeFromTree(sub.tasks, tid) });
-      return {...p, subteams: ns};
-    });
-  }, [state]);
+  const removeTask = useCallback((tk, sid, tid) => setState(p => {
+    const ns = {...p.subteams};
+    ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: removeFromTree(sub.tasks, tid) });
+    return {...p, subteams: ns};
+  }), []);
   const submitCoachSession = useCallback(() => { setState(p => ({...p,coachSessions:[...p.coachSessions,{id:generateId(),date:new Date().toISOString(),answers:{...sessionAnswers},triggeredBy:p.lockdown?.triggeredBy||"manual"}],lockdown:p.lockdown?{...p.lockdown,resolved:true,until:new Date(Date.now()+p.coach.cooldownHours*3600000).toISOString()}:null})); setSessionAnswers({}); setShowCoachSession(false); }, [sessionAnswers]);
   const updateCoach = useCallback((path,value) => setState(p => {const nc={...p.coach};const pts=path.split(".");if(pts.length===2)nc[pts[0]]={...nc[pts[0]],[pts[1]]:parseInt(value)||0};else nc[pts[0]]=parseInt(value)||0;return{...p,coach:nc};}), []);
 
@@ -1283,7 +1275,7 @@ function TeamTaskManager() {
                         {taskLinks.length > 0 && (
                           <div style={{display:"flex",flexWrap:"wrap",gap:3,paddingLeft:depth*16+(depth>0?14:22),paddingBottom:2,alignItems:"center"}}>
                             {taskLinks.map(link => (
-                              <a key={link.id} href="#" onClick={(e)=>handleLinkClick(e,link.url)} style={{
+                              <a key={link.id} href={link.url} onClick={(e)=>handleLinkClick(e,link.url)} target="_blank" rel="noopener noreferrer" style={{
                                 background:dColor+"10",border:`1px solid ${dColor}25`,
                                 color:dColor,padding:"1px 7px",borderRadius:10,
                                 fontSize:8,textDecoration:"none",fontFamily:P.font,letterSpacing:1,
@@ -1481,7 +1473,7 @@ function TeamTaskManager() {
                   <div style={{display:"flex",flexWrap:"wrap",gap:4,paddingLeft:depth*20+(depth>0?14:0),padding:"4px 0 4px "+(depth*20+(depth>0?14:0))+"px",alignItems:"center"}}>
                     {task.links.map(link => (
                       <div key={link.id} style={{display:"flex",alignItems:"center",gap:0}}>
-                        <a href="#" onClick={(e)=>handleLinkClick(e,link.url)} style={{
+                        <a href={link.url} onClick={(e)=>handleLinkClick(e,link.url)} target="_blank" rel="noopener noreferrer" style={{
                           background:dColor+(themeMode==="light"?"10":"14"),
                           border:`1.5px solid ${dColor}30`,
                           color:dColor,padding:"3px 8px",
@@ -1631,7 +1623,7 @@ function TeamTaskManager() {
             <div style={{marginTop:12}}>
               <div style={{fontFamily:P.font,...P.labelStyle,color:T.textMut,marginBottom:8}}>QUICK LINKS</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {(sub.links||[]).map((link,li)=>(<a key={li} href="#" onClick={(e)=>handleLinkClick(e,link.url)} style={{background:shade+(themeMode==="light"?"10":"12"),border:`2px solid ${shade}${themeMode==="light"?"20":"25"}`,color:shade,padding:"5px 12px",borderRadius:P.btnStyle.borderRadius,fontSize:10,textDecoration:"none",fontFamily:P.font,letterSpacing:2}}>⚡ {link.title}</a>))}
+                {(sub.links||[]).map((link,li)=>(<a key={li} href={link.url} onClick={(e)=>handleLinkClick(e,link.url)} target="_blank" rel="noopener noreferrer" style={{background:shade+(themeMode==="light"?"10":"12"),border:`2px solid ${shade}${themeMode==="light"?"20":"25"}`,color:shade,padding:"5px 12px",borderRadius:P.btnStyle.borderRadius,fontSize:10,textDecoration:"none",fontFamily:P.font,letterSpacing:2}}>⚡ {link.title}</a>))}
               </div>
               {showAddLink===sub.id?(
                 <div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -1957,7 +1949,7 @@ function TeamTaskManager() {
                           {allLinks0.length > 0 ? (
                             <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
                               {allLinks0.map((link, li) => (
-                                <a key={li} href="#" onClick={(e)=>handleLinkClick(e,link.url)} style={{
+                                <a key={li} href={link.url} onClick={(e)=>handleLinkClick(e,link.url)} target="_blank" rel="noopener noreferrer" style={{
                                   background:shade0+"15",border:`1px solid ${shade0}35`,
                                   color:shade0,padding:"5px 12px",borderRadius:12,
                                   fontSize:10,textDecoration:"none",fontFamily:P_ALL.coach.font,
