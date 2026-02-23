@@ -456,6 +456,9 @@ function TeamTaskManager() {
   const [addLinkTo, setAddLinkTo] = useState(null); // {subId, taskId} for task-level links
   const [taskLinkTitle, setTaskLinkTitle] = useState("");
   const [taskLinkUrls, setTaskLinkUrls] = useState([""]);
+  const [editingLinkId, setEditingLinkId] = useState(null); // link id being edited
+  const startEditLink = (subId, taskId, link) => { setEditingLinkId({subId, taskId, linkId: link.id}); setTaskLinkTitle(link.title); setTaskLinkUrls(link.url.split("|").map(u=>u.trim())); setAddLinkTo({subId, taskId}); };
+  const isEditingLink = (linkId) => editingLinkId?.linkId === linkId;
   const [tagPicker, setTagPicker] = useState(null); // {subId, taskId} for tag assignment
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#7B1FA2");
@@ -484,7 +487,13 @@ function TeamTaskManager() {
     if (rows.length && rows[0].value) {
       const p = JSON.parse(rows[0].value);
       const merged = {...DEFAULT_STATE,...p,fonts:{...DEFAULT_FONTS,...(p.fonts||{})}};
-      if (merged.subteams) { for (const tk of ["attackers","midPlayers","defenders"]) { if (merged.subteams[tk]) merged.subteams[tk] = merged.subteams[tk].map(sub => ({...sub, tasks: migrateTasks(sub.tasks)})); } }
+      // Fix links: remove https:// prefix from local paths
+      const fixLinks = (tasks) => tasks.map(t => {
+        if (t.links) t.links = t.links.map(l => ({...l, url: l.url.replace(/^https?:\/\/([A-Z]:\\)/i, '$1').replace(/^https?:\/\/(\\\\)/i, '$1')}));
+        if (t.children) t.children = fixLinks(t.children);
+        return t;
+      });
+      if (merged.subteams) { for (const tk of ["attackers","midPlayers","defenders"]) { if (merged.subteams[tk]) merged.subteams[tk] = merged.subteams[tk].map(sub => ({...sub, tasks: fixLinks(migrateTasks(sub.tasks))})); } }
       setState(merged);
     } else {
       // 2. First time: build state from relational tables
@@ -553,17 +562,33 @@ function TeamTaskManager() {
     }
     return {...p, subteams: ns};
   }), []);
-  const addLink = useCallback((sid,title,url) => setState(p => {const ns={...p.subteams};ns.attackers=p.subteams.attackers.map(sub=>sub.id!==sid?sub:{...sub,links:[...(sub.links||[]),{id:generateId(),title:title.toUpperCase(),url:url.startsWith("http")?url:`https://${url}`}]});return{...p,subteams:ns};}), []);
+  const addLink = useCallback((sid,title,url) => setState(p => {const ns={...p.subteams};for(const tk of ["attackers","midPlayers","defenders"]){ns[tk]=p.subteams[tk].map(sub=>sub.id!==sid?sub:{...sub,links:[...(sub.links||[]),{id:generateId(),title:title.toUpperCase(),url}]});}return{...p,subteams:ns};}), []);
   // Task-level links (any depth)
   const addTaskLink = useCallback((sid, tid, title, url) => setState(p => {
     const ns = {...p.subteams};
-    const link = { id: generateId(), title: title.toUpperCase(), url: url.startsWith("http") ? url : `https://${url}` };
-    ns.attackers = p.subteams.attackers.map(sub => sub.id !== sid ? sub : { ...sub, tasks: addLinkInTree(sub.tasks, tid, link) });
+    const link = { id: generateId(), title: title.toUpperCase(), url };
+    for (const tk of ["attackers","midPlayers","defenders"]) {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: addLinkInTree(sub.tasks, tid, link) });
+    }
     return {...p, subteams: ns};
   }), []);
   const removeTaskLink = useCallback((sid, tid, linkId) => setState(p => {
     const ns = {...p.subteams};
-    ns.attackers = p.subteams.attackers.map(sub => sub.id !== sid ? sub : { ...sub, tasks: removeLinkInTree(sub.tasks, tid, linkId) });
+    for (const tk of ["attackers","midPlayers","defenders"]) {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: removeLinkInTree(sub.tasks, tid, linkId) });
+    }
+    return {...p, subteams: ns};
+  }), []);
+  const editTaskLink = useCallback((sid, tid, linkId, newTitle, newUrl) => setState(p => {
+    const ns = {...p.subteams};
+    const updateLinkInTree = (tasks) => tasks.map(t => {
+      if (t.id === tid) return {...t, links: (t.links||[]).map(l => l.id !== linkId ? l : {...l, title: newTitle.toUpperCase(), url: newUrl})};
+      if (t.children) return {...t, children: updateLinkInTree(t.children)};
+      return t;
+    });
+    for (const tk of ["attackers","midPlayers","defenders"]) {
+      ns[tk] = p.subteams[tk].map(sub => sub.id !== sid ? sub : { ...sub, tasks: updateLinkInTree(sub.tasks) });
+    }
     return {...p, subteams: ns};
   }), []);
 
@@ -1437,7 +1462,7 @@ function TeamTaskManager() {
                   {depth === 0 && task.recurring && (
                     <span style={{fontFamily:P.bodyFont,...P.labelStyle,fontSize:8,color:T.textMut}}>REPEAT</span>
                   )}
-                  <button onClick={(e)=>{e.stopPropagation();setAddLinkTo({subId:sub.id,taskId:task.id});setTaskLinkTitle("");setTaskLinkUrls([""]);setAddSubTo(null);setTagPicker(null);}} style={{
+                  <button onClick={(e)=>{e.stopPropagation();setAddLinkTo({subId:sub.id,taskId:task.id});setTaskLinkTitle("");setTaskLinkUrls([""]);setEditingLinkId(null);setAddSubTo(null);setTagPicker(null);}} style={{
                     background:isAddingLink ? dColor : "transparent",
                     border:`1.5px solid ${dColor}60`,
                     color:isAddingLink ? "#fff" : dColor,
@@ -1482,7 +1507,7 @@ function TeamTaskManager() {
                     {task.links.map(link => (
                       <div key={link.id} style={{display:"flex",alignItems:"center",gap:0}}>
                         <a href="#" onClick={(e)=>handleLinkClick(e,link.url)} style={{
-                          background:dColor+(themeMode==="light"?"10":"14"),
+                          background:isEditingLink(link.id)?dColor+"30":dColor+(themeMode==="light"?"10":"14"),
                           border:`1.5px solid ${dColor}30`,
                           color:dColor,padding:"3px 8px",
                           borderRadius:`${P.btnStyle.borderRadius}px 0 0 ${P.btnStyle.borderRadius}px`,
@@ -1491,6 +1516,12 @@ function TeamTaskManager() {
                         }}>
                           <span style={{fontSize:8}}>⚡</span> {link.title}
                         </a>
+                        <button onClick={()=>startEditLink(sub.id,task.id,link)} style={{
+                          background:dColor+(themeMode==="light"?"10":"14"),
+                          border:`1.5px solid ${dColor}30`,borderLeft:"none",
+                          color:dColor,cursor:"pointer",fontSize:8,
+                          padding:"3px 4px",opacity:0.6,
+                        }}>✏️</button>
                         <button onClick={()=>removeTaskLink(sub.id,task.id,link.id)} style={{
                           background:dColor+(themeMode==="light"?"10":"14"),
                           border:`1.5px solid ${dColor}30`,borderLeft:"none",
@@ -1506,21 +1537,22 @@ function TeamTaskManager() {
                 {isAddingLink && (() => {
                   const combinedUrl = taskLinkUrls.filter(u => u.trim()).join(" | ");
                   const canSave = taskLinkTitle.trim() && combinedUrl;
-                  const saveFn = () => { if (canSave) { addTaskLink(sub.id, task.id, taskLinkTitle.trim(), combinedUrl); setTaskLinkTitle(""); setTaskLinkUrls([""]); setAddLinkTo(null); }};
+                  const isEditing = editingLinkId?.subId===sub.id && editingLinkId?.taskId===task.id;
+                  const saveFn = () => { if (canSave) { if (isEditing) { editTaskLink(sub.id, task.id, editingLinkId.linkId, taskLinkTitle.trim(), combinedUrl); } else { addTaskLink(sub.id, task.id, taskLinkTitle.trim(), combinedUrl); } setTaskLinkTitle(""); setTaskLinkUrls([""]); setAddLinkTo(null); setEditingLinkId(null); }};
                   return (
                   <div style={{paddingLeft:depth*20+(depth>0?14:0),padding:"6px 0 6px "+(depth*20+(depth>0?14:0))+"px"}}>
                     <div style={{background:T.surface,border:`1px solid ${dColor}25`,borderRadius:6,padding:8,display:"flex",flexDirection:"column",gap:5}}>
                       <div style={{display:"flex",gap:4,alignItems:"center"}}>
                         <input style={{...inp(tk),width:90,fontSize:10,padding:"5px 8px"}} placeholder="TITLE" value={taskLinkTitle} onChange={e=>setTaskLinkTitle(e.target.value)} autoFocus />
-                        <button style={{...btn(tk,dColor),padding:"4px 10px",fontSize:9,opacity:canSave?1:0.3}} onClick={saveFn}>🔗 SAVE</button>
-                        <button style={{background:"transparent",border:"none",color:T.textSec,cursor:"pointer",fontSize:14,fontWeight:700}} onClick={()=>setAddLinkTo(null)}>✕</button>
+                        <button style={{...btn(tk,dColor),padding:"4px 10px",fontSize:9,opacity:canSave?1:0.3}} onClick={saveFn}>{isEditing ? "✏️ UPDATE" : "🔗 SAVE"}</button>
+                        <button style={{background:"transparent",border:"none",color:T.textSec,cursor:"pointer",fontSize:14,fontWeight:700}} onClick={()=>{setAddLinkTo(null);setEditingLinkId(null);}}>✕</button>
                       </div>
                       {taskLinkUrls.map((u, idx) => (
                         <div key={idx} style={{display:"flex",gap:4,alignItems:"center"}}>
                           <span style={{fontSize:8,color:dColor,fontFamily:P_ALL.coach.font,width:14,textAlign:"center",opacity:0.5}}>{idx+1}</span>
                           <input style={{...inp(tk),flex:1,fontSize:10,padding:"5px 8px"}} placeholder={idx===0?"https://... or C:\\path\\file":"+ another path"} value={u}
                             onChange={e=>{const a=[...taskLinkUrls];a[idx]=e.target.value;setTaskLinkUrls(a);}}
-                            onKeyDown={e=>{if(e.key==="Enter")saveFn();if(e.key==="Escape")setAddLinkTo(null);}} />
+                            onKeyDown={e=>{if(e.key==="Enter")saveFn();if(e.key==="Escape"){setAddLinkTo(null);setEditingLinkId(null);};}} />
                           {taskLinkUrls.length > 1 && (
                             <button onClick={()=>setTaskLinkUrls(taskLinkUrls.filter((_,i)=>i!==idx))} style={{background:"transparent",border:"none",color:T.rmBtn,cursor:"pointer",fontSize:12,padding:"0 4px"}}>×</button>
                           )}
