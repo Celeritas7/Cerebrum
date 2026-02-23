@@ -33,32 +33,6 @@ async function supaPatch(path, body) { return fetch(`${SUPA_URL}/${path}`, { met
 async function supaPost(path, body) { return fetch(`${SUPA_URL}/${path}`, { method: "POST", headers: {...SUPA_HEADERS, Prefer: "return=minimal"}, body: JSON.stringify(body) }); }
 async function supaDelete(path) { return fetch(`${SUPA_URL}/${path}`, { method: "DELETE", headers: {...SUPA_HEADERS, Prefer: "return=minimal"} }); }
 
-// Local file launcher via PowerShell micro-server
-const SQUAD_SERVER = "http://localhost:9876";
-let _serverAlive = null;
-async function checkServer() { try { const r = await fetch(`${SQUAD_SERVER}/ping`); _serverAlive = r.ok; } catch { _serverAlive = false; } return _serverAlive; }
-function isLocalPath(url) { return /^[A-Z]:\\/.test(url) || /^\\\\/.test(url); }
-async function openLocalFile(path) {
-  try {
-    const r = await fetch(`${SQUAD_SERVER}/open`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({path}) });
-    return r.ok;
-  } catch { return false; }
-}
-function handleLinkClick(e, url) {
-  e.preventDefault();
-  const paths = url.split("|").map(p => p.trim()).filter(Boolean);
-  const localPaths = paths.filter(p => isLocalPath(p));
-  const webUrls = paths.filter(p => !isLocalPath(p));
-  webUrls.forEach(u => window.open(u, "_blank"));
-  if (localPaths.length > 0) {
-    fetch(`${SQUAD_SERVER}/open`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({paths: localPaths}) })
-    .then(r => { if (!r.ok) alert("SQUAD Launcher error."); })
-    .catch(() => alert("SQUAD Launcher not running.\nPC links only work on desktop with squad_launcher.ps1 running."));
-  }
-}
-// Check server on load
-setTimeout(() => checkServer(), 2000);
-
 // Build app state from Supabase relational tables (first-time bootstrap)
 async function buildStateFromDB() {
   const cfgRows = await supaGet("mind_map_app_chat_memory?key=eq.squad_config&select=value");
@@ -455,7 +429,7 @@ function TeamTaskManager() {
   const [subTaskText, setSubTaskText] = useState("");
   const [addLinkTo, setAddLinkTo] = useState(null); // {subId, taskId} for task-level links
   const [taskLinkTitle, setTaskLinkTitle] = useState("");
-  const [taskLinkUrls, setTaskLinkUrls] = useState([""]);
+  const [taskLinkUrl, setTaskLinkUrl] = useState("");
   const [tagPicker, setTagPicker] = useState(null); // {subId, taskId} for tag assignment
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#7B1FA2");
@@ -1273,9 +1247,9 @@ function TeamTaskManager() {
                         </div>
                         {/* Compact links */}
                         {taskLinks.length > 0 && (
-                          <div style={{display:"flex",flexWrap:"wrap",gap:3,paddingLeft:depth*16+(depth>0?14:22),paddingBottom:2,alignItems:"center"}}>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:3,paddingLeft:depth*16+(depth>0?14:22),paddingBottom:2}}>
                             {taskLinks.map(link => (
-                              <a key={link.id} href={link.url} onClick={(e)=>handleLinkClick(e,link.url)} target="_blank" rel="noopener noreferrer" style={{
+                              <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer" style={{
                                 background:dColor+"10",border:`1px solid ${dColor}25`,
                                 color:dColor,padding:"1px 7px",borderRadius:10,
                                 fontSize:8,textDecoration:"none",fontFamily:P.font,letterSpacing:1,
@@ -1429,7 +1403,7 @@ function TeamTaskManager() {
                   {depth === 0 && task.recurring && (
                     <span style={{fontFamily:P.bodyFont,...P.labelStyle,fontSize:8,color:T.textMut}}>REPEAT</span>
                   )}
-                  <button onClick={(e)=>{e.stopPropagation();setAddLinkTo({subId:sub.id,taskId:task.id});setTaskLinkTitle("");setTaskLinkUrls([""]);setAddSubTo(null);setTagPicker(null);}} style={{
+                  <button onClick={(e)=>{e.stopPropagation();setAddLinkTo({subId:sub.id,taskId:task.id});setTaskLinkTitle("");setTaskLinkUrl("");setAddSubTo(null);setTagPicker(null);}} style={{
                     background:isAddingLink ? dColor : "transparent",
                     border:`1.5px solid ${dColor}60`,
                     color:isAddingLink ? "#fff" : dColor,
@@ -1470,10 +1444,10 @@ function TeamTaskManager() {
                 )}
                 {/* Task links */}
                 {hasLinks && (
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4,paddingLeft:depth*20+(depth>0?14:0),padding:"4px 0 4px "+(depth*20+(depth>0?14:0))+"px",alignItems:"center"}}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,paddingLeft:depth*20+(depth>0?14:0),padding:"4px 0 4px "+(depth*20+(depth>0?14:0))+"px"}}>
                     {task.links.map(link => (
                       <div key={link.id} style={{display:"flex",alignItems:"center",gap:0}}>
-                        <a href={link.url} onClick={(e)=>handleLinkClick(e,link.url)} target="_blank" rel="noopener noreferrer" style={{
+                        <a href={link.url} target="_blank" rel="noopener noreferrer" style={{
                           background:dColor+(themeMode==="light"?"10":"14"),
                           border:`1.5px solid ${dColor}30`,
                           color:dColor,padding:"3px 8px",
@@ -1495,39 +1469,15 @@ function TeamTaskManager() {
                   </div>
                 )}
                 {/* Add link input */}
-                {isAddingLink && (() => {
-                  const combinedUrl = taskLinkUrls.filter(u => u.trim()).join(" | ");
-                  const canSave = taskLinkTitle.trim() && combinedUrl;
-                  const saveFn = () => { if (canSave) { addTaskLink(sub.id, task.id, taskLinkTitle.trim(), combinedUrl); setTaskLinkTitle(""); setTaskLinkUrls([""]); setAddLinkTo(null); }};
-                  return (
-                  <div style={{paddingLeft:depth*20+(depth>0?14:0),padding:"6px 0 6px "+(depth*20+(depth>0?14:0))+"px"}}>
-                    <div style={{background:T.surface,border:`1px solid ${dColor}25`,borderRadius:6,padding:8,display:"flex",flexDirection:"column",gap:5}}>
-                      <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                        <input style={{...inp(tk),width:90,fontSize:10,padding:"5px 8px"}} placeholder="TITLE" value={taskLinkTitle} onChange={e=>setTaskLinkTitle(e.target.value)} autoFocus />
-                        <button style={{...btn(tk,dColor),padding:"4px 10px",fontSize:9,opacity:canSave?1:0.3}} onClick={saveFn}>🔗 SAVE</button>
-                        <button style={{background:"transparent",border:"none",color:T.textSec,cursor:"pointer",fontSize:14,fontWeight:700}} onClick={()=>setAddLinkTo(null)}>✕</button>
-                      </div>
-                      {taskLinkUrls.map((u, idx) => (
-                        <div key={idx} style={{display:"flex",gap:4,alignItems:"center"}}>
-                          <span style={{fontSize:8,color:dColor,fontFamily:P_ALL.coach.font,width:14,textAlign:"center",opacity:0.5}}>{idx+1}</span>
-                          <input style={{...inp(tk),flex:1,fontSize:10,padding:"5px 8px"}} placeholder={idx===0?"https://... or C:\\path\\file":"+ another path"} value={u}
-                            onChange={e=>{const a=[...taskLinkUrls];a[idx]=e.target.value;setTaskLinkUrls(a);}}
-                            onKeyDown={e=>{if(e.key==="Enter")saveFn();if(e.key==="Escape")setAddLinkTo(null);}} />
-                          {taskLinkUrls.length > 1 && (
-                            <button onClick={()=>setTaskLinkUrls(taskLinkUrls.filter((_,i)=>i!==idx))} style={{background:"transparent",border:"none",color:T.rmBtn,cursor:"pointer",fontSize:12,padding:"0 4px"}}>×</button>
-                          )}
-                        </div>
-                      ))}
-                      <button onClick={()=>setTaskLinkUrls([...taskLinkUrls,""])} style={{
-                        background:"transparent",border:`1px dashed ${dColor}30`,
-                        color:dColor,padding:"3px 8px",borderRadius:4,
-                        fontSize:8,cursor:"pointer",fontFamily:P_ALL.coach.font,
-                        letterSpacing:1,opacity:0.6,alignSelf:"flex-start",
-                      }}>+ ADD PATH</button>
-                    </div>
+                {isAddingLink && (
+                  <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",paddingLeft:depth*20+(depth>0?14:0),padding:"6px 0 6px "+(depth*20+(depth>0?14:0))+"px"}}>
+                    <input style={{...inp(tk),width:90,fontSize:10,padding:"5px 8px"}} placeholder="TITLE" value={taskLinkTitle} onChange={e=>setTaskLinkTitle(e.target.value)} autoFocus />
+                    <input style={{...inp(tk),flex:1,minWidth:100,fontSize:10,padding:"5px 8px"}} placeholder="URL" value={taskLinkUrl} onChange={e=>setTaskLinkUrl(e.target.value)}
+                      onKeyDown={e=>{if(e.key==="Enter"&&taskLinkTitle.trim()&&taskLinkUrl.trim()){addTaskLink(sub.id,task.id,taskLinkTitle.trim(),taskLinkUrl.trim());setTaskLinkTitle("");setTaskLinkUrl("");setAddLinkTo(null);}if(e.key==="Escape"){setAddLinkTo(null);}}} />
+                    <button style={{...btn(tk,dColor),padding:"4px 10px",fontSize:9}} onClick={()=>{if(taskLinkTitle.trim()&&taskLinkUrl.trim()){addTaskLink(sub.id,task.id,taskLinkTitle.trim(),taskLinkUrl.trim());setTaskLinkTitle("");setTaskLinkUrl("");setAddLinkTo(null);}}}>🔗 LINK</button>
+                    <button style={{background:"transparent",border:"none",color:T.textSec,cursor:"pointer",fontSize:14,fontWeight:700}} onClick={()=>setAddLinkTo(null)}>✕</button>
                   </div>
-                  );
-                })()}
+                )}
                 {/* Sub-task input inline */}
                 {isAddingHere && (
                   <div style={{display:"flex",gap:6,alignItems:"center",paddingLeft:(depth+1)*20+12,padding:"8px 0 8px "+((depth+1)*20+12)+"px"}}>
@@ -1623,12 +1573,12 @@ function TeamTaskManager() {
             <div style={{marginTop:12}}>
               <div style={{fontFamily:P.font,...P.labelStyle,color:T.textMut,marginBottom:8}}>QUICK LINKS</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {(sub.links||[]).map((link,li)=>(<a key={li} href={link.url} onClick={(e)=>handleLinkClick(e,link.url)} target="_blank" rel="noopener noreferrer" style={{background:shade+(themeMode==="light"?"10":"12"),border:`2px solid ${shade}${themeMode==="light"?"20":"25"}`,color:shade,padding:"5px 12px",borderRadius:P.btnStyle.borderRadius,fontSize:10,textDecoration:"none",fontFamily:P.font,letterSpacing:2}}>⚡ {link.title}</a>))}
+                {(sub.links||[]).map((link,li)=>(<a key={li} href={link.url} target="_blank" rel="noopener noreferrer" style={{background:shade+(themeMode==="light"?"10":"12"),border:`2px solid ${shade}${themeMode==="light"?"20":"25"}`,color:shade,padding:"5px 12px",borderRadius:P.btnStyle.borderRadius,fontSize:10,textDecoration:"none",fontFamily:P.font,letterSpacing:2}}>⚡ {link.title}</a>))}
               </div>
               {showAddLink===sub.id?(
                 <div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
                   <input style={{...inp(tk),flex:1,minWidth:80}} placeholder="TITLE" value={newLinkTitle} onChange={e=>setNewLinkTitle(e.target.value)} autoFocus/>
-                  <input style={{...inp(tk),flex:2,minWidth:120}} placeholder="URL or path (use | for multiple)" value={newLinkUrl} onChange={e=>setNewLinkUrl(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newLinkTitle.trim()&&newLinkUrl.trim()){addLink(sub.id,newLinkTitle.trim(),newLinkUrl.trim());setNewLinkTitle("");setNewLinkUrl("");setShowAddLink(false);}}}/>
+                  <input style={{...inp(tk),flex:2,minWidth:120}} placeholder="URL" value={newLinkUrl} onChange={e=>setNewLinkUrl(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&newLinkTitle.trim()&&newLinkUrl.trim()){addLink(sub.id,newLinkTitle.trim(),newLinkUrl.trim());setNewLinkTitle("");setNewLinkUrl("");setShowAddLink(false);}}}/>
                   <button style={btn(tk,shade)} onClick={()=>{if(newLinkTitle.trim()&&newLinkUrl.trim()){addLink(sub.id,newLinkTitle.trim(),newLinkUrl.trim());setNewLinkTitle("");setNewLinkUrl("");setShowAddLink(false);}}}>{tk==="attackers"?"DEPLOY":"ADD"}</button>
                   <button style={{...btn(tk,"transparent"),color:T.textSec}} onClick={()=>setShowAddLink(false)}>✕</button>
                 </div>
@@ -1947,9 +1897,9 @@ function TeamTaskManager() {
                         <div style={{background:shade0+"10",border:`1.5px solid ${shade0}30`,borderLeft:`3px solid ${shade0}`,borderRadius:8,padding:12}}>
                           <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:8}}>{primary.task.text}</div>
                           {allLinks0.length > 0 ? (
-                            <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                               {allLinks0.map((link, li) => (
-                                <a key={li} href={link.url} onClick={(e)=>handleLinkClick(e,link.url)} target="_blank" rel="noopener noreferrer" style={{
+                                <a key={li} href={link.url} target="_blank" rel="noopener noreferrer" style={{
                                   background:shade0+"15",border:`1px solid ${shade0}35`,
                                   color:shade0,padding:"5px 12px",borderRadius:12,
                                   fontSize:10,textDecoration:"none",fontFamily:P_ALL.coach.font,
