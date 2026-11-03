@@ -26,7 +26,7 @@ const { useState, useEffect, useCallback, useRef } = React;
 
 const APP_KEY = "team-task-manager-v6";
 const SUPA_URL = "https://wylxvmkcrexwfpjpbhyy.supabase.co/rest/v1";
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5bHh2bWtjcmV4d2ZwanBiaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg2MzkxMDYsImV4cCI6MjA4NDIxNTEwNn0.6Bxo42hx4jwlJGWnfjiTpiDUsYfc1QLTN3YtrU1efak";
+const SUPA_KEY = "sb_publishable_e3pDOuxIdstaC7s0a680kQ_R10TrAyv";
 const SUPA_HEADERS = { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" };
 async function supaGet(path) { const r = await fetch(`${SUPA_URL}/${path}`, { headers: SUPA_HEADERS }); return r.ok ? r.json() : []; }
 async function supaPatch(path, body) { return fetch(`${SUPA_URL}/${path}`, { method: "PATCH", headers: {...SUPA_HEADERS, Prefer: "return=representation"}, body: JSON.stringify(body) }); }
